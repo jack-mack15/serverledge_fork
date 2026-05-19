@@ -15,21 +15,34 @@ executor:
 	CGO_ENABLED=0 $(GO) build -o $(BIN)/$@ cmd/$@/executor.go
 
 DOCKERHUB_USER=grussorusso
-images:  image-python310 image-nodejs17ng image-base
-image-python310:
-	docker build -t $(DOCKERHUB_USER)/serverledge-python310 -f images/python310/Dockerfile .
+images:  image-python image-nodejs17ng image-base image-go
+image-python:
+	docker build -t $(DOCKERHUB_USER)/serverledge-python314 -f images/python314/Dockerfile .
+	docker build -t $(DOCKERHUB_USER)/serverledge-python312ml -f images/python312ml/Dockerfile .
 image-base:
 	docker build -t $(DOCKERHUB_USER)/serverledge-base -f images/base-alpine/Dockerfile .
 image-nodejs17ng:
 	docker build -t $(DOCKERHUB_USER)/serverledge-nodejs17ng -f images/nodejs17ng/Dockerfile .
+image-go:
+	docker build -t $(DOCKERHUB_USER)/serverledge-go125 -f images/go125/Dockerfile .
 
 push-images:
-	docker push $(DOCKERHUB_USER)/serverledge-python310
+	docker push $(DOCKERHUB_USER)/serverledge-python314
 	docker push $(DOCKERHUB_USER)/serverledge-base
 	docker push $(DOCKERHUB_USER)/serverledge-nodejs17ng
+	docker push $(DOCKERHUB_USER)/serverledge-python312ml
+	docker push $(DOCKERHUB_USER)/serverledge-go125
 
+# Runs integration tests (all tests EXCEPT unit tests)
 test:
-	go test -v ./...
+	$(GO) test -v $(shell $(GO) list ./... | grep -Ev 'internal/container|examples')
 
-.PHONY: serverledge serverledge-cli lb executor test images
+# Runs only unit tests
+unit-test:
+	go test -v -short ./internal/container/... ./internal/lb/...
+
+.PHONY: serverledge serverledge-cli lb executor test unit-test integration-test images
+
+clean:
+	@test -n "$(BIN)" && [ -d "$(BIN)" ] && rm -rf $(BIN) || { echo "Invalid BIN directory: $(BIN)"; exit 1; } && go clean -testcache
 

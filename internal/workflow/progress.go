@@ -193,10 +193,11 @@ func (p *Progress) Save() error {
 	}
 	// saves the json object into etcd
 	key := getProgressEtcdKey(p.ReqId)
-	log.Printf("Saving progress with key: %s", key)
+	log.Printf("[Rq-%v] Saving progress - bytes: %d", p.ReqId, len(payload))
 
 	_, err = cli.Put(ctx, key, string(payload))
 	if err != nil {
+		utils.TriggerEtcdReconnection()
 		return fmt.Errorf("failed etcd Put: %v", err)
 	}
 	return nil
@@ -212,7 +213,10 @@ func RetrieveProgress(reqId ReqId) (*Progress, error) {
 	defer cancel()
 	key := getProgressEtcdKey(reqId)
 	getResponse, err := cli.Get(ctx, key)
-	if err != nil || len(getResponse.Kvs) < 1 {
+	if err != nil {
+		utils.TriggerEtcdReconnection()
+		return nil, fmt.Errorf("failed to retrieve progress for requestId: %s", key)
+	} else if len(getResponse.Kvs) < 1 {
 		return nil, fmt.Errorf("failed to retrieve progress for requestId: %s", key)
 	}
 

@@ -23,6 +23,12 @@ const POOL_CLEANUP_PERIOD = "janitor.interval"
 // container expiration time
 const CONTAINER_EXPIRATION_TIME = "container.expiration"
 
+// offloading cache validity time for EdgeOnlypolicy
+const OFFLOADING_CACHE_VALIDITY = "offloading.cache.validity"
+
+// local CPU architecture (optional; auto-detected otherwise)
+const NODE_ARCHITECTURE = "node.architecture"
+
 // cache capacity
 const CACHE_SIZE = "cache.size"
 
@@ -32,14 +38,11 @@ const CACHE_CLEANUP = "cache.cleanup"
 // default expiration time assigned to a cache item (Seconds)
 const CACHE_ITEM_EXPIRATION = "cache.expiration"
 
-// default policy is to persist cache (boolean). Use false in localonly deployments
-const CACHE_PERSISTENCE = "cache.persistence"
-
-// true if the current server is a remote cloud server
-const IS_IN_CLOUD = "cloud"
-
 // the area wich the server belongs to
 const REGISTRY_AREA = "registry.area"
+
+// (optional) ID of this node (must be unique in the area!)
+const REGISTRY_NODE_ID = "registry.node.id"
 
 // the area that acts as "remote cloud" for this node
 const REGISTRY_REMOTE_AREA = "registry.remote.area"
@@ -49,6 +52,30 @@ const REG_NEARBY_INTERVAL = "registry.nearby.interval"
 
 // long period for general monitoring inside the area
 const REG_MONITORING_INTERVAL = "registry.monitoring.interval"
+
+// ArchitectureAwareLb: number of replicas in the HashRing for each physical node
+const REPLICAS = "lb.replicas"
+
+// LoadBalancer refresh interval (in seconds)
+const LB_REFRESH_INTERVAL = "lb.refresh_interval"
+
+// LoadBalancer working mode (i.e.: "MAB" or "RoundRobin")
+const LB_MODE = "lb.mode"
+
+// Select if the load balancer is architecture aware (useful for experiments)
+const Arch_AWARENESS = "lb.arch_awareness"
+
+// Policy for the Multi Armed Bandit (MAB) (i.e.: "LinUcb" or "UCB1")
+const MAB_POLICY = "mab.policy"
+
+// C value for the UCB1 policy
+const MAB_UCB1_C = "mab.ucb1.c"
+
+// Aplha value for the LinUCB policy
+const MAB_LINUCB_ALPHA = "mab.linucb.alpha"
+
+// Lambda value for the LinUCB policy, used for the memory penalty of reward
+const MAB_LINUCB_LAMBDA = "mab.linucb.lambda"
 
 // port for udp status listener
 const LISTEN_UDP_PORT = "registry.udp.port"
@@ -62,12 +89,28 @@ const METRICS_PROMETHEUS_PORT = "metrics.prometheus.port"
 // Prometheus IP address / hostname
 const METRICS_PROMETHEUS_HOST = "metrics.prometheus.host"
 
+// Port used by optional Prometheus Pushgateway
+const METRICS_PROMETHEUS_PUSHGATEWAY_PORT = "metrics.prometheus.pushgateway.port"
+
+// Prometheus optional Pushgateway IP address / hostname
+const METRICS_PROMETHEUS_PUSHGATEWAY_HOST = "metrics.prometheus.pushgateway.host"
+
 // Interval (in seconds) for metrics retriever
 const METRICS_RETRIEVER_INTERVAL = "metrics.retriever.interval"
+
+// Filename to dump retrieved metrics as JSON
+const METRICS_DUMP_JSON_FILE = "metrics.dump.json.file"
+
+// Filename to load metrics from JSON
+const METRICS_LOAD_JSON_FILE = "metrics.load.json.file"
 
 // Scheduling policy to use
 // Possible values: "qosaware", "default", "cloudonly"
 const SCHEDULING_POLICY = "scheduler.policy"
+
+// If "edgeonly" policy is set, tries to execute the offloadable functions locally in the case
+// where all neighbors won't support the function's runtime architecture
+const SCHEDULING_FALLBACK_LOCAL = "scheduler.fallback.local"
 
 // Capacity of the queue (possibly) used by the scheduler
 const SCHEDULER_QUEUE_CAPACITY = "scheduler.queue.capacity"
@@ -77,6 +120,8 @@ const TRACING_ENABLED = "tracing.enabled"
 
 // Custom output file for traces
 const TRACING_OUTFILE = "tracing.outfile"
+
+const WORKFLOW_ALWAYS_SAVE_PROGRESS = "workflow.always_save_progress"
 
 // Workflow offloading policy to use
 // Possible values: "disable", "ilp"
@@ -98,6 +143,7 @@ const WORKFLOW_OFFLOADING_POLICY_REGION_COST = "workflow.offloading.policy.regio
 const WORKFLOW_OFFLOADING_POLICY_ILP_OBJ_WEIGHT_VIOLATIONS = "workflow.offloading.policy.ilp.obj.violations"
 const WORKFLOW_OFFLOADING_POLICY_ILP_OBJ_WEIGHT_DATA_TRANSFERS = "workflow.offloading.policy.ilp.obj.data"
 const WORKFLOW_OFFLOADING_POLICY_ILP_OBJ_WEIGHT_COST = "workflow.offloading.policy.ilp.obj.cost"
+const WORKFLOW_OFFLOADING_POLICY_ILP_OBJ_WEIGHT_RECLAIMED_MEMORY = "workflow.offloading.policy.ilp.obj.reclaimed"
 
 // Estimated bandwidth between the current node and the data store
 const WORKFLOW_OFFLOADING_POLICY_NODE_TO_DATA_STORE_BANDWIDTH = "workflow.offloading.policy.node2datastore.bandwidth"
@@ -110,3 +156,9 @@ const WORKFLOW_THRESHOLD_BASED_POLICY_THRESHOLD = "workflow.offloading.policy.th
 
 // Max number of tasks offloaded at once in the threshold-based offloading policy
 const WORKFLOW_THRESHOLD_BASED_POLICY_MAX_OFFLOADED = "workflow.offloading.policy.threshold.offloaded.max"
+
+// For profiling: save function input to file
+const WORKFLOW_SAVE_FUNCTION_INPUT_TO_FILE = "workflow.profiling.saveinput"
+
+const LOAD_BALANCER_POLICY = "loadbalancer.policy"
+const LOAD_BALANCER_TARGET_UPDATE_INTERVAL = "loadbalancer.targets.interval"

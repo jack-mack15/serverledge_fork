@@ -3,12 +3,13 @@ package node
 import (
 	"errors"
 	"fmt"
-	"github.com/lithammer/shortuuid"
-	"github.com/serverledge-faas/serverledge/internal/config"
 	"runtime"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/lithammer/shortuuid"
+	"github.com/serverledge-faas/serverledge/internal/config"
 )
 
 var OutOfResourcesErr = errors.New("not enough resources for function execution")
@@ -16,6 +17,7 @@ var OutOfResourcesErr = errors.New("not enough resources for function execution"
 type NodeID struct {
 	Area string
 	Key  string
+	Arch string
 }
 
 var LocalNode NodeID
@@ -24,9 +26,15 @@ func (n NodeID) String() string {
 	return fmt.Sprintf("(%s)%s", n.Area, n.Key)
 }
 
-func NewIdentifier(area string) NodeID {
-	id := shortuuid.New() + strconv.FormatInt(time.Now().UnixNano(), 10) //id creato sul momento
-	return NodeID{Area: area, Key: id}
+func NewRandomIdentifier(area string) NodeID {
+	id := shortuuid.New() + strconv.FormatInt(time.Now().UnixNano(), 10)
+	arch := runtime.GOARCH
+	return NodeID{Area: area, Key: id, Arch: arch}
+}
+
+func NewIdentifier(id, area string) NodeID {
+	arch := runtime.GOARCH
+	return NodeID{Area: area, Key: id, Arch: arch}
 }
 
 type Resources struct {
@@ -47,7 +55,7 @@ func (n *Resources) Init() {
 }
 
 func (n *Resources) String() string {
-	return fmt.Sprintf("[CPUs: %f/%f - Mem: %d(%d warm)/%d]", n.usedCPUs, n.totalCPUs, n.busyPoolUsedMem, n.warmPoolUsedMem, n.totalMemory)
+	return fmt.Sprintf("[CPUs: %f/%f - Mem: %d(+%d warm)/%d]", n.usedCPUs, n.totalCPUs, n.busyPoolUsedMem, n.warmPoolUsedMem, n.totalMemory)
 }
 
 func (n *Resources) FreeMemory() int64 {

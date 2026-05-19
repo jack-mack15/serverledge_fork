@@ -1,8 +1,12 @@
 package metrics
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus/push"
 	"log"
+	"os"
+	"time"
 
 	"net/http"
 
@@ -17,7 +21,7 @@ import (
 var Enabled bool
 var registry = prometheus.NewRegistry()
 var ScrapingHandler http.Handler = nil
-var durationBuckets = []float64{0.002, 0.005, 0.010, 0.02, 0.03, 0.05, 0.1, 0.15, 0.3, 0.6, 1.0}
+var durationBuckets = prometheus.ExponentialBuckets(0.01, 2, 15)
 
 const (
 	COMPLETIONS         = "completed_count"
@@ -41,11 +45,11 @@ var (
 		Name:    EXECUTION_TIME,
 		Help:    "Function duration",
 		Buckets: durationBuckets,
-	}, []string{"node", "function"})
+	}, []string{"function"})
 	metricInitializationTime = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name: INITIALIZATION_TIME,
 		Help: "Function initialization time (cold start duration)",
-	}, []string{"node", "function"})
+	}, []string{"function"})
 	metricOutputSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name: OUTPUT_SIZE,
 		Help: "Function output size",
@@ -57,6 +61,7 @@ var (
 )
 
 type RetrievedMetrics struct {
+	EdgeColdStartProbability   map[string]map[string]float64
 	RemoteColdStartProbability map[string]float64
 	AvgRemoteExecutionTime     map[string]float64
 	AvgEdgeExecutionTime       map[string]map[string]float64
@@ -68,6 +73,8 @@ type RetrievedMetrics struct {
 
 func (r RetrievedMetrics) String() string {
 	s := ""
+	s += "EDGE COLD START PROB:\n"
+	s += fmt.Sprintf("  %v\n\n", r.EdgeColdStartProbability)
 	s += "REMOTE COLD START PROB:\n"
 	s += fmt.Sprintf("  %v\n\n", r.RemoteColdStartProbability)
 	s += "REMOTE EXEC TIMES:\n"
@@ -105,7 +112,56 @@ func Init() {
 	ScrapingHandler = promhttp.HandlerFor(registry, promhttp.HandlerOpts{
 		EnableOpenMetrics: true})
 
-	go MetricsRetriever()
+	pushgatewayHost := config.GetString(config.METRICS_PROMETHEUS_PUSHGATEWAY_HOST, "")
+	if pushgatewayHost != "" {
+
+		pushgatewayPort := config.GetInt(config.METRICS_PROMETHEUS_PUSHGATEWAY_PORT, 9091)
+		hostport := fmt.Sprintf("http://%s:%d", pushgatewayHost, pushgatewayPort)
+
+		log.Println("Using Prometheus Pushgateway at:", hostport)
+
+		go func(pushgatewayUrl string) {
+			ticker := time.NewTicker(30 * time.Second)
+
+			for {
+				select {
+				case <-ticker.C:
+					// Push the entire registry in one go
+					err := push.New(pushgatewayUrl, "serverledge").Gatherer(registry).
+						Grouping("node", node.LocalNode.String()).
+						Add()
+					if err != nil {
+						log.Printf("Could not push metrics: %v", err)
+					}
+				}
+			}
+		}(hostport)
+
+	}
+
+	jsonMetricsToLoad := config.GetString(config.METRICS_LOAD_JSON_FILE, "")
+	if jsonMetricsToLoad == "" {
+		go MetricsRetriever()
+	} else {
+		log.Println("Disabling metrics retriever and loading metrics from:", jsonMetricsToLoad)
+		err := loadMetricsFromJSON(jsonMetricsToLoad)
+		if err != nil {
+			log.Printf("Error loading metrics: %v\n", err)
+		}
+		log.Println(retrievedMetrics)
+	}
+}
+
+func loadMetricsFromJSON(filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&retrievedMetrics)
+	return err
 }
 
 func AddCompletedInvocation(funcName string, coldStart bool) {
@@ -115,10 +171,10 @@ func AddCompletedInvocation(funcName string, coldStart bool) {
 	}
 }
 func AddFunctionDurationValue(funcName string, duration float64) {
-	metricExecutionTime.With(prometheus.Labels{"function": funcName, "node": node.LocalNode.String()}).Observe(duration)
+	metricExecutionTime.With(prometheus.Labels{"function": funcName}).Observe(duration)
 }
 func AddFunctionInitTimeValue(funcName string, initTime float64) {
-	metricInitializationTime.With(prometheus.Labels{"function": funcName, "node": node.LocalNode.String()}).Observe(initTime)
+	metricInitializationTime.With(prometheus.Labels{"function": funcName}).Observe(initTime)
 }
 func AddFunctionOutputSizeValue(funcName string, size float64) {
 	metricOutputSize.With(prometheus.Labels{"function": funcName}).Observe(size)

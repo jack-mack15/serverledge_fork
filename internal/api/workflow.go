@@ -33,7 +33,7 @@ func CreateWorkflowFromASL(e echo.Context) error {
 
 	// checking if the function already exists. If exists we return an error
 	_, found := workflow.Get(creationRequest.Name)
-	if found {
+	if found && !creationRequest.OverwriteIfExists {
 		log.Printf("Dropping request for already existing workflow '%s'", creationRequest.Name)
 		return e.JSON(http.StatusConflict, "workflow already exists")
 	}
@@ -171,6 +171,8 @@ func ResumeWorkflow(e echo.Context) error {
 	req.Async = clientReq.Async
 	req.Resuming = true
 	req.Id = clientReq.ReqId
+	req.ExecReport.ResponseTime = 0.0
+	req.ExecReport.Result = nil // NOTE: this should be nil until workflow completion
 	req.ExecReport.Reports = map[string]*function.ExecutionReport{}
 
 	if clientReq.Plan.ToExecute != nil {
@@ -214,6 +216,9 @@ func InvokeWorkflow(e echo.Context) error {
 	req.Plan = nil
 	req.Resuming = false
 	req.Id = fmt.Sprintf("%v-%s%d", wflow.Name, node.LocalNode.String()[len(node.LocalNode.String())-5:], req.Arrival.Nanosecond())
+	req.ExecReport.ResponseTime = 0.0
+	req.ExecReport.SchedulingTime = 0.0
+	req.ExecReport.Result = nil // NOTE: this should be nil until workflow completion
 	req.ExecReport.Reports = map[string]*function.ExecutionReport{}
 
 	return handleWorkflowInvocation(e, req)
@@ -233,13 +238,13 @@ func handleWorkflowInvocation(e echo.Context, req *workflow.Request) error {
 				return
 			}
 
-			log.Printf("Invocation succeeded. Publishing: %v", req.ExecReport)
 			req.ExecReport.ResponseTime = time.Now().Sub(req.Arrival).Seconds()
 			workflow.PublishAsyncInvocationResponse(req.Id, workflow.InvocationResponse{
-				Success:      true,
-				Result:       req.ExecReport.Result,
-				Reports:      req.ExecReport.Reports,
-				ResponseTime: req.ExecReport.ResponseTime,
+				Success:        true,
+				Result:         req.ExecReport.Result,
+				Reports:        req.ExecReport.Reports,
+				ResponseTime:   req.ExecReport.ResponseTime,
+				SchedulingTime: req.ExecReport.SchedulingTime,
 			})
 		}()
 
@@ -252,18 +257,21 @@ func handleWorkflowInvocation(e echo.Context, req *workflow.Request) error {
 	defer workflowInvocationRequestPool.Put(req)
 
 	if errors.Is(err, node.OutOfResourcesErr) {
+		log.Printf("[Rq-%v] Returning 429", req.Id)
 		return e.String(http.StatusTooManyRequests, "")
 	} else if err != nil {
-		log.Printf("Invocation failed: %v", err)
+		log.Printf("[Rq-%v] Invocation failed: %v", req.Id, err)
 		return e.JSON(http.StatusInternalServerError, err.Error())
 	} else {
+		log.Printf("[Rq-%v] Invocation succeeded", req.Id)
 		req.ExecReport.ResponseTime = time.Now().Sub(req.Arrival).Seconds()
 
 		return e.JSON(http.StatusOK, workflow.InvocationResponse{
-			Success:      true,
-			Result:       req.ExecReport.Result,
-			Reports:      req.ExecReport.Reports,
-			ResponseTime: req.ExecReport.ResponseTime,
+			Success:        true,
+			Result:         req.ExecReport.Result,
+			Reports:        req.ExecReport.Reports,
+			ResponseTime:   req.ExecReport.ResponseTime,
+			SchedulingTime: req.ExecReport.SchedulingTime,
 		})
 	}
 }

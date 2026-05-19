@@ -2,10 +2,11 @@ package scheduling
 
 import (
 	"fmt"
-	"github.com/serverledge-faas/serverledge/internal/registration"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/serverledge-faas/serverledge/internal/registration"
 
 	"github.com/serverledge-faas/serverledge/internal/container"
 	"github.com/serverledge-faas/serverledge/internal/function"
@@ -53,18 +54,23 @@ func Run(p Policy) {
 		case r = <-requests: // receive request
 			go p.OnArrival(r)
 		case c = <-completions:
-			node.HandleCompletion(c.cont, c.r.Fun)
-			p.OnCompletion(c.r.Fun, c.r.ExecutionReport)
+			f, found := function.GetFunction(c.funcName)
+			if !found {
+				log.Printf("Function %s not found", c.funcName)
+				continue
+			}
+			node.HandleCompletion(c.cont, f)
+			p.OnCompletion(f, &c.report)
 
-			if metrics.Enabled && !c.failed && c.r.ExecutionReport != nil {
-				metrics.AddCompletedInvocation(c.r.Fun.Name, !c.r.ExecutionReport.IsWarmStart)
-				if !c.r.offloaded {
-					metrics.AddFunctionDurationValue(c.r.Fun.Name, c.r.ExecutionReport.Duration)
-					if !c.r.ExecutionReport.IsWarmStart {
-						metrics.AddFunctionInitTimeValue(c.r.Fun.Name, c.r.ExecutionReport.InitTime)
+			if metrics.Enabled && !c.failed {
+				metrics.AddCompletedInvocation(c.funcName, !c.report.IsWarmStart)
+				if !c.offloaded {
+					metrics.AddFunctionDurationValue(c.funcName, c.report.Duration)
+					if !c.report.IsWarmStart {
+						metrics.AddFunctionInitTimeValue(c.funcName, c.report.InitTime)
 					}
 				}
-				outputSize := len(c.r.ExecutionReport.Result)
+				outputSize := len(c.report.Result)
 				metrics.AddFunctionOutputSizeValue(r.Fun.Name, float64(outputSize))
 			}
 		}
@@ -165,7 +171,10 @@ func handleCloudOffload(r *scheduledRequest) {
 	if offloadingTarget == nil {
 		log.Printf("No remote offloading target available; dropping request")
 		r.decisionChannel <- schedDecision{action: DROP}
-	} else {
+		// TODO check if this is a correct assumption to make
+	} else if offloadingTarget.IsLoadBalancer || r.Fun.SupportsArch(node.LocalNode.Arch) {
 		handleOffload(r, offloadingTarget.APIUrl())
+	} else {
+		dropRequest(r)
 	}
 }

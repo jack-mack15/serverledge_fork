@@ -3,6 +3,8 @@ package function
 import (
 	"encoding/json"
 	"fmt"
+	"log"
+	"slices"
 
 	"time"
 
@@ -15,13 +17,14 @@ import (
 // Function describes a serverless function.
 type Function struct {
 	Name            string
-	Runtime         string  // example: python310
-	MemoryMB        int64   // MB
-	CPUDemand       float64 // 1.0 -> 1 core
-	MaxConcurrency  int16   // intra-container maximum concurrency
-	Handler         string  // example: "module.function_name"
-	TarFunctionCode string  // input is .tar
-	CustomImage     string  // used if custom runtime is chosen
+	Runtime         string   // example: python314
+	MemoryMB        int64    // MB
+	CPUDemand       float64  // 1.0 -> 1 core
+	MaxConcurrency  int16    // intra-container maximum concurrency
+	Handler         string   // example: "module.function_name"
+	TarFunctionCode string   // input is .tar
+	CustomImage     string   // used if custom runtime is chosen
+	SupportedArchs  []string // list of supported architectures by the runtime
 	Signature       *Signature
 }
 
@@ -31,6 +34,10 @@ func (f *Function) getEtcdKey() string {
 
 func getEtcdKey(funcName string) string {
 	return fmt.Sprintf("/function/%s", funcName)
+}
+
+func (f *Function) SupportsArch(arch string) bool {
+	return slices.Contains(f.SupportedArchs, arch)
 }
 
 // GetFunction retrieves a Function given its name. If it doesn't exist, returns false
@@ -76,7 +83,11 @@ func getFromEtcd(name string) (*Function, bool) {
 	}
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 	getResponse, err := cli.Get(ctx, getEtcdKey(name))
-	if err != nil || len(getResponse.Kvs) < 1 {
+	if err != nil {
+		utils.TriggerEtcdReconnection()
+		log.Printf("etcd get failed: %v", err)
+		return nil, false
+	} else if len(getResponse.Kvs) < 1 {
 		return nil, false
 	}
 
@@ -103,6 +114,7 @@ func (f *Function) SaveToEtcd() error {
 	}
 	_, err = cli.Put(ctx, f.getEtcdKey(), string(payload))
 	if err != nil {
+		utils.TriggerEtcdReconnection()
 		return fmt.Errorf("Failed Put: %v", err)
 	}
 

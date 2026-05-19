@@ -61,18 +61,19 @@ func (td *TaskData) Save(reqId ReqId, task TaskId) error {
 		return err
 	}
 	ctx := context.TODO()
-	// marshal the progress object into json
+	// marshal task data object into json
 	payload, err := json.Marshal(td)
 	if err != nil {
-		return fmt.Errorf("could not marshal progress: %v", err)
+		return fmt.Errorf("could not marshal task data: %v", err)
 	}
 	// saves the json object into etcd
 	key := getTaskDataEtcdKey(reqId, task)
-	//log.Printf("Saving PD on etcd : %v\n", td.Data)
-	log.Printf("Saving PD on etcd with key: %s and payload: %v\n", key, string(payload))
 
+	log.Printf("[Rq-%v] Saving task data to etcd - key: %s - bytes: %d", reqId, key, len(payload))
 	_, err = cli.Put(ctx, key, string(payload))
 	if err != nil {
+		log.Printf("[Rq-%v] Could not save task data due to failed Put()...retrying Etcd connection: %v", reqId, err)
+		utils.TriggerEtcdReconnection()
 		return fmt.Errorf("failed etcd Put partial data: %v", err)
 	}
 	return nil
@@ -86,10 +87,13 @@ func RetrievePartialData(reqId ReqId, task TaskId) (*TaskData, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	key := getTaskDataEtcdKey(reqId, task)
-	log.Printf("Retrieving partial data with key: %s\n", key)
 	getResponse, err := cli.Get(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve partialDatas for requestId: %s", key)
+		utils.TriggerEtcdReconnection()
+		return nil, fmt.Errorf("failed to retrieve PD for requestId %s: %v", key, err)
+	}
+	if len(getResponse.Kvs) < 1 {
+		return nil, fmt.Errorf("not found PD for requestId %s: %v", key, err)
 	}
 	if len(getResponse.Kvs) > 1 {
 		return nil, fmt.Errorf("more than 1 TaskData associated with key: %s", key)

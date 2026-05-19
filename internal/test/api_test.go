@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/spf13/cast"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +12,7 @@ import (
 	"github.com/serverledge-faas/serverledge/internal/function"
 	"github.com/serverledge-faas/serverledge/internal/workflow"
 	"github.com/serverledge-faas/serverledge/utils"
+	"github.com/spf13/cast"
 )
 
 // TestContainerPool executes repeatedly different functions (**not compositions**) to verify the container pool
@@ -20,26 +21,27 @@ func TestContainerPool(t *testing.T) {
 		t.Skip("Skipping integration test")
 	}
 	// creating inc and double functions
-	funcs := []string{"inc", "double"}
-	for _, name := range funcs {
+	pyFuncs := []string{"inc", "double"}
+	for _, name := range pyFuncs {
 		fn, err := InitializePyFunction(name, "handler", function.NewSignature().
-			AddInput("input", function.Int{}).
-			AddOutput("result", function.Int{}).
+			AddInput("n", function.Int{}).
+			AddOutput("n", function.Int{}).
 			Build())
 		utils.AssertNil(t, err)
 
 		createApiIfNotExistsTest(t, fn, HOST, PORT)
 	}
-	// executing all functions
+
+	// executing function
 	channel := make(chan error)
 	const n = 3
 	for i := 0; i < n; i++ {
-		for _, name := range funcs {
+		for _, name := range pyFuncs {
 			x := make(map[string]interface{})
-			x["input"] = 1
+			x["n"] = 1
 			fnName := name
 			go func() {
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(5 * time.Second)
 				err := invokeApiTest(fnName, x, HOST, PORT)
 				channel <- err
 			}()
@@ -47,12 +49,12 @@ func TestContainerPool(t *testing.T) {
 	}
 
 	// wait for all functions to complete and checking the errors
-	for i := 0; i < len(funcs)*n; i++ {
+	for i := 0; i < len(pyFuncs)*n; i++ {
 		err := <-channel
 		utils.AssertNil(t, err)
 	}
 	// delete each function
-	for _, name := range funcs {
+	for _, name := range pyFuncs {
 		deleteApiTest(t, name, HOST, PORT)
 	}
 	//utils.AssertTrueMsg(t, workflow.IsEmptyPartialDataCache(), "partial data cache is not empty")
@@ -70,8 +72,8 @@ func TestCreateWorkflow(t *testing.T) {
 	}
 
 	fn, err := InitializePyFunction("inc", "handler", function.NewSignature().
-		AddInput("input", function.Int{}).
-		AddOutput("result", function.Int{}).
+		AddInput("n", function.Int{}).
+		AddOutput("n", function.Int{}).
 		Build())
 	utils.AssertNilMsg(t, err, "failed to initialize function")
 	wflow, err := CreateSequenceWorkflow(fn, fn, fn)
@@ -99,8 +101,8 @@ func TestInvokeWorkflow(t *testing.T) {
 	}
 	fcName := "sequence"
 	fn, err := initializeJsFunction("inc", function.NewSignature().
-		AddInput("input", function.Int{}).
-		AddOutput("result", function.Int{}).
+		AddInput("n", function.Int{}).
+		AddOutput("n", function.Int{}).
 		Build())
 	utils.AssertNilMsg(t, err, "failed to initialize function")
 	wflow, err := CreateSequenceWorkflow(fn, fn, fn)
@@ -114,7 +116,7 @@ func TestInvokeWorkflow(t *testing.T) {
 
 	// === this is the test ===
 	params := make(map[string]interface{})
-	params["input"] = 1
+	params["n"] = 1
 	invokeWorkflowApiTest(t, params, fcName, HOST, PORT, false)
 
 	// here we do not use REST API
@@ -133,13 +135,13 @@ func TestInvokeWorkflow_DifferentFunctions(t *testing.T) {
 	}
 	fcName := "sequence"
 	fnJs, err := initializeJsFunction("inc", function.NewSignature().
-		AddInput("input", function.Int{}).
-		AddOutput("result", function.Int{}).
+		AddInput("n", function.Int{}).
+		AddOutput("n", function.Int{}).
 		Build())
 	utils.AssertNilMsg(t, err, "failed to initialize javascript function")
 	fnPy, err := InitializePyFunction("double", "handler", function.NewSignature().
-		AddInput("input", function.Int{}).
-		AddOutput("result", function.Int{}).
+		AddInput("n", function.Int{}).
+		AddOutput("n", function.Int{}).
 		Build())
 	utils.AssertNilMsg(t, err, "failed to initialize python function")
 	wflow, err := CreateSequenceWorkflow(fnPy, fnJs, fnPy, fnJs)
@@ -153,7 +155,7 @@ func TestInvokeWorkflow_DifferentFunctions(t *testing.T) {
 
 	// === this is the test ===
 	params := make(map[string]interface{})
-	params["input"] = 1
+	params["n"] = 1
 	invokeWorkflowApiTest(t, params, fcName, HOST, PORT, false)
 
 	// here we do not use REST API
@@ -172,16 +174,16 @@ func TestDeleteWorkflow(t *testing.T) {
 	}
 	fcName := "sequence"
 	fn, err := InitializePyFunction("inc", "handler", function.NewSignature().
-		AddInput("input", function.Int{}).
-		AddOutput("result", function.Int{}).
+		AddInput("n", function.Int{}).
+		AddOutput("n", function.Int{}).
 		Build())
 	if err != nil {
 		fmt.Printf("inc creation failed: %v\n", err)
 		t.Fail()
 	}
 	db, err := InitializePyFunction("double", "handler", function.NewSignature().
-		AddInput("input", function.Int{}).
-		AddOutput("result", function.Int{}).
+		AddInput("n", function.Int{}).
+		AddOutput("n", function.Int{}).
 		Build())
 	utils.AssertNilMsg(t, err, "failed to initialize function")
 	wflow, err := CreateSequenceWorkflow(fn, db, fn)
@@ -212,8 +214,8 @@ func TestAsyncInvokeWorkflow(t *testing.T) {
 	fcName := "sequence"
 
 	fn, err := InitializePyFunction("inc", "handler", function.NewSignature().
-		AddInput("input", function.Int{}).
-		AddOutput("result", function.Int{}).
+		AddInput("n", function.Int{}).
+		AddOutput("n", function.Int{}).
 		Build())
 	utils.AssertNilMsg(t, err, "failed to initialize function")
 	wflow, err := CreateSequenceWorkflow(fn, fn, fn)
@@ -227,7 +229,7 @@ func TestAsyncInvokeWorkflow(t *testing.T) {
 
 	// === this is the test ===
 	params := make(map[string]interface{})
-	params["input"] = 1
+	params["n"] = 1
 	invocationResult := invokeWorkflowApiTest(t, params, fcName, HOST, PORT, true)
 
 	reqIdStruct := &function.AsyncResponse{}
@@ -251,11 +253,43 @@ func TestAsyncInvokeWorkflow(t *testing.T) {
 			i++
 			time.Sleep(200 * time.Millisecond)
 		} else {
-			utils.AssertEquals(t, 4, cast.ToInt(response.Result["result"]))
+			utils.AssertEquals(t, 4, cast.ToInt(response.Result["n"]))
 			break
 		}
 	}
 
 	err = wflow.Delete()
 	utils.AssertNilMsg(t, err, "failed to delete composition")
+}
+
+// TestMismatchingArch tests that the execution fails if the node's architecture doesn't support the function's one
+// (and offloading is disabled)
+func TestMismatchingArchNoOffload(t *testing.T) {
+
+	name := "double"
+	fn, err := InitializePyFunction(name, "handler", function.NewSignature().
+		AddInput("input", function.Int{}).
+		AddOutput("result", function.Int{}).
+		Build())
+	utils.AssertNil(t, err)
+	currentArch := runtime.GOARCH
+	for i, arch := range fn.SupportedArchs {
+		if arch == currentArch {
+			fn.SupportedArchs = append(fn.SupportedArchs[:i], fn.SupportedArchs[i+1:]...)
+		}
+	}
+
+	createApiIfNotExistsTest(t, fn, HOST, PORT)
+
+	// executing all functions
+	x := make(map[string]interface{})
+	x["input"] = 1
+	fnName := name
+
+	time.Sleep(50 * time.Millisecond)
+	err = invokeApiTestSetOffloading(fnName, x, HOST, PORT, false) // no offloading
+	utils.AssertNonNil(t, err)                                     // Expecting an error due to mismatching architecture
+
+	// delete function
+	deleteApiTest(t, name, HOST, PORT)
 }

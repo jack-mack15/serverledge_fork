@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/serverledge-faas/serverledge/internal/node"
 	"io"
 	"net/http"
 	"sort"
@@ -25,7 +26,7 @@ import (
 	"github.com/serverledge-faas/serverledge/internal/types"
 )
 
-var offloadingPolicy OffloadingPolicy = &IlpOffloadingPolicy{}
+var offloadingPolicy OffloadingPolicy = nil
 
 func CreateOffloadingPolicy() {
 	policyConf := config.GetString(config.WORKFLOW_OFFLOADING_POLICY, "disable")
@@ -411,7 +412,7 @@ func (wflow *Workflow) savePartialDataForReadyTasks(requestId ReqId, progress *P
 					return fmt.Errorf("Could not save partial data: %v", err)
 				}
 			} else {
-				log.Printf("PD not available locally for %s; they might be on Etcd already...", prev)
+				// PD not available locally; they might be on Etcd already...
 			}
 
 			handledTasks[prev] = true
@@ -423,6 +424,8 @@ func (wflow *Workflow) savePartialDataForReadyTasks(requestId ReqId, progress *P
 
 // Invoke schedules each function of the workflow and invokes them
 func (wflow *Workflow) Invoke(r *Request) error {
+
+	alwaysSaveProgress := config.GetBool(config.WORKFLOW_ALWAYS_SAVE_PROGRESS, false)
 
 	var err error
 	requestId := ReqId(r.Id)
@@ -436,13 +439,22 @@ func (wflow *Workflow) Invoke(r *Request) error {
 	dataMap := make(map[TaskId]*TaskData)
 
 	if len(progress.ReadyToExecute) == 0 {
-		return fmt.Errorf("wflow resumed but no task is ready for execution: %v", requestId)
+		return fmt.Errorf("[Rq-%v] wflow resumed but no task is ready for execution", requestId)
 	}
 
-	for len(progress.ReadyToExecute) > 0 {
-		decision, err := offloadingPolicy.Evaluate(r, progress)
-		if err == nil && decision.Offload {
+	log.Printf("[Rq-%v] Starting/resuming execution (%d to executed)", requestId, len(progress.ReadyToExecute))
 
+	for len(progress.ReadyToExecute) > 0 {
+		t0 := time.Now()
+		decision, err := offloadingPolicy.Evaluate(r, progress)
+		policyTime := time.Since(t0).Seconds()
+		r.ExecReport.SchedulingTime += policyTime
+
+		if err != nil {
+			return fmt.Errorf("an error occurred in policy evaluation: %v", err)
+		}
+
+		if decision.Offload || alwaysSaveProgress {
 			err := progress.Save()
 			if err != nil {
 				return fmt.Errorf("Could not save progress: %v", err)
@@ -454,8 +466,9 @@ func (wflow *Workflow) Invoke(r *Request) error {
 				return fmt.Errorf("Could not save partial data: %v", err)
 			}
 
-			log.Printf("Offloading request: %v", requestId)
+		}
 
+		if decision.Offload {
 			err = offload(r, &decision)
 			if err != nil {
 				return err
@@ -463,15 +476,17 @@ func (wflow *Workflow) Invoke(r *Request) error {
 
 			if r.ExecReport.Result != nil {
 				// Workflow execution has completed on remote node
-				break
+				log.Printf("[Rq-%v] Workflow has completed on remote node", requestId)
+				return nil
 			}
 
 			progress, err = RetrieveProgress(requestId)
 			if err != nil {
 				return fmt.Errorf("Could not retrieve progress after offloading: %v", err)
 			}
-			log.Printf("Ready to execute after offloading: %v", progress.ReadyToExecute)
-		} else if err == nil {
+
+			log.Printf("[Rq-%v] Ready to execute after offloading: %v", requestId, progress.ReadyToExecute)
+		} else {
 			// pick next executable task
 			var taskToExecute TaskId = ""
 			for _, task := range progress.ReadyToExecute {
@@ -480,8 +495,11 @@ func (wflow *Workflow) Invoke(r *Request) error {
 				}
 			}
 			if taskToExecute == "" {
+				log.Printf("[Rq-%v] Workflow has not completed but there is nothing left to execute in the plan", requestId)
 				break
 			}
+
+			log.Printf("[Rq-%v] Now going to execute %s", requestId, taskToExecute)
 
 			// Prepare input for taskToExecute
 			var input *TaskData
@@ -496,17 +514,15 @@ func (wflow *Workflow) Invoke(r *Request) error {
 					}
 
 					if input != nil {
-						return fmt.Errorf("Merge of inputs not supported yet!")
+						return fmt.Errorf("merge of inputs not supported yet!")
 					}
 
 					input, found = dataMap[previousTask]
 					if !found {
-						log.Printf("Input not found in dataMap for previousTask %s", previousTask)
 						input, err = RetrievePartialData(requestId, previousTask)
 						if err != nil {
-							return fmt.Errorf("Could not retrieve partial data: %v", err)
+							return fmt.Errorf("could not retrieve partial data: %v", err)
 						}
-						log.Printf("Input retrieved from etcd: %s", input)
 					}
 				}
 			}
@@ -516,13 +532,22 @@ func (wflow *Workflow) Invoke(r *Request) error {
 			}
 			output, err := wflow.ExecuteTask(r, taskToExecute, input, progress)
 			if err != nil {
-				return fmt.Errorf("failed wflow execution: %v", err)
+				if errors.Is(err, node.OutOfResourcesErr) {
+					log.Printf("[Rq-%v] Could not execute %s: out of resources", requestId, taskToExecute)
+					return err
+				} else {
+					return fmt.Errorf("failed wflow execution: %v", err)
+				}
 			}
+
+			log.Printf("[Rq-%v] Executed %s", requestId, taskToExecute)
 
 			dataMap[taskToExecute] = output
 
 			if len(progress.ReadyToExecute) == 0 && output != nil {
 				r.ExecReport.Result = output.Data
+
+				log.Printf("[Rq-%v] Workflow completed", requestId)
 
 				if isProgressOnEtcd {
 					err = DeleteProgress(requestId)
@@ -537,8 +562,6 @@ func (wflow *Workflow) Invoke(r *Request) error {
 
 				return nil
 			}
-		} else {
-			return fmt.Errorf("an error occurred in policy evaluation: %v", err)
 		}
 
 	}
@@ -559,7 +582,7 @@ func (wflow *Workflow) Invoke(r *Request) error {
 
 func offload(r *Request, policyDecision *OffloadingDecision) error {
 
-	log.Printf("Offloading decision: %v", policyDecision)
+	log.Printf("[Rq-%v] Offloading decision: %v", r.Id, policyDecision)
 
 	request := WorkflowInvocationResumeRequest{
 		ReqId: r.Id,
@@ -584,7 +607,11 @@ func offload(r *Request, policyDecision *OffloadingDecision) error {
 	url := fmt.Sprintf("%s/workflow/resume/%s", policyDecision.RemoteHost, r.W.Name)
 	resp, err := utils.PostJson(url, invocationBody)
 	if err != nil {
-		return fmt.Errorf("HTTP request for offloading failed: %v", err)
+		if resp != nil && resp.StatusCode == http.StatusTooManyRequests {
+			return node.OutOfResourcesErr
+		} else {
+			return fmt.Errorf("HTTP request for offloading failed: %v", err)
+		}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -605,6 +632,8 @@ func offload(r *Request, policyDecision *OffloadingDecision) error {
 	for k, v := range response.Reports {
 		r.ExecReport.Reports[k] = v
 	}
+
+	r.ExecReport.SchedulingTime += response.SchedulingTime
 
 	if response.Result == nil {
 		// workflow execution is not complete after offloading

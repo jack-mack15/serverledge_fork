@@ -189,22 +189,11 @@ func (s *Signature) CheckOrMatchInputs(inputMap map[string]interface{}) error {
 	for _, def := range s.Inputs {
 		err := def.CheckInput(inputMap)
 
-		if err != nil && len(s.Inputs) == 1 {
-			key, ok := def.FindEntryThatTypeChecks(inputMap)
-			if ok {
-				val := inputMap[key]
-				delete(inputMap, key)
-				inputMap[def.Name] = val
-				err = nil
-			} else {
-				err = fmt.Errorf("no output entry input-checks with the next function")
-			}
-		}
-
 		if err != nil {
-			errors += fmt.Sprintf("type-error: %v", err)
+			errors += fmt.Sprintf("no output entry input-checks with the next function")
 		}
 	}
+
 	if errors != "" {
 		return fmt.Errorf("%s", errors)
 	}
@@ -294,31 +283,4 @@ func datatypeToString(dataType DataTypeEnum) string {
 	default:
 		return ""
 	}
-}
-
-// SignatureInference is a best-effort function that tries to infer signature from a function without a defined signature. Maybe we do not need it.
-func SignatureInference(params map[string]interface{}) *Signature {
-	signatureBuilder := NewSignature()
-
-	for k, v := range params {
-		typeList := []DataTypeEnum{
-			Float{},
-			Int{},
-			Bool{},
-			Text{},
-			Array[Float]{},
-			Array[Int]{},
-			Array[Bool]{},
-			Array[Text]{},
-			Void{},
-		}
-		for _, t := range typeList {
-			if t.TypeCheck(v) == nil {
-				signatureBuilder.AddInput(k, t)
-				break
-			}
-		}
-	}
-
-	return signatureBuilder.AddOutput("result", Text{}).Build()
 }

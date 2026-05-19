@@ -4,12 +4,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/serverledge-faas/serverledge/internal/config"
+	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/server/v3/embed"
 	"log"
+	"net/http"
 	"os"
-	"os/exec"
 	"testing"
 	"time"
+
+	"github.com/serverledge-faas/serverledge/internal/config"
 
 	"github.com/labstack/echo/v4"
 	"github.com/serverledge-faas/serverledge/internal/api"
@@ -47,7 +50,7 @@ func testStartServerledge(isInCloud bool, outboundIp string) *echo.Echo {
 	schedulingPolicy := &scheduling.DefaultLocalPolicy{}
 	// register to etcd, this way server is visible to the others under a given local area
 	myArea := config.GetString(config.REGISTRY_AREA, "ROME")
-	node.LocalNode = node.NewIdentifier(myArea)
+	node.LocalNode = node.NewRandomIdentifier(myArea)
 
 	err := registration.RegisterNode()
 	if err != nil {
@@ -89,11 +92,62 @@ func TestMain(m *testing.M) {
 
 	// TODO: avoid full setup if testing.Short()
 
+	//
+	// START ETCD
+	//
+	// Create a temporary directory for etcd data
+	tempDir, err := os.MkdirTemp("", "etcd-data-*")
+	if err != nil {
+		log.Fatalf("Failed to create temp dir for etcd: %v", err)
+	}
+	// Schedule cleanup for the end of the test run
+	defer func(path string) {
+		err := os.RemoveAll(path)
+		if err != nil {
+			log.Printf("Failed to remove temp dir for etcd: %v", err)
+		}
+	}(tempDir)
+
+	// 1. Setup: Start an embedded etcd server
+	cfg := embed.NewConfig()
+	cfg.Dir = tempDir                      // Use the temporary directory
+	cfg.LogOutputs = []string{"/dev/null"} // Silence etcd output
+	etcd, err := embed.StartEtcd(cfg)
+	if err != nil {
+		log.Fatalf("Failed to start embedded etcd: %v", err)
+	}
+	defer etcd.Close()
+
+	select {
+	case <-etcd.Server.ReadyNotify():
+		// Silently continue
+	case <-time.After(60 * time.Second):
+		etcd.Server.Stop() // trigger a shutdown
+		log.Fatal("Embedded etcd server took too long to start")
+	}
+
+	// Create a client connected to the embedded server
+	etcdClient, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{etcd.Clients[0].Addr().String()},
+		DialTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		log.Fatalf("Failed to create etcd client: %v", err)
+	}
+	defer func(etcdClient *clientv3.Client) {
+		err := etcdClient.Close()
+		if err != nil {
+			log.Printf("Failed to close etcd client: %v", err)
+		}
+	}(etcdClient)
+
 	echoServer, ok := setupServerledge(outboundIp.String())
 	if ok != nil {
 		fmt.Printf("failed to initialize serverledgde: %v\n", ok)
 		os.Exit(int(codes.Internal))
 	}
+
+	waitForServerReady()
 
 	// run all test independently
 	code := m.Run()
@@ -106,26 +160,29 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// startReliably can start the containers, or restart them if needed
-func startReliably(startScript string) error {
-	cmd := exec.CommandContext(context.Background(), getShell(), startScript)
-	err := cmd.Run()
-	if err != nil {
-		log.Fatalf("failed to start (%s): %v", startScript, err)
+func waitForServerReady() {
+	// Wait for the server to be ready by polling the /status endpoint. There was a race condition in the test
+	// especially noticeable for less powerful hardware.
+	for i := 0; i < 50; i++ {
+		resp, err := http.Get(fmt.Sprintf("http://%s:%d/status", HOST, PORT))
+		if err == nil && resp.StatusCode == http.StatusOK {
+			log.Println("Server is ready.")
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	return err
+	log.Fatal("Server not ready after timeout")
 }
 
 // run the bash script to initialize serverledge
 func setupServerledge(outboundIp string) (*echo.Echo, error) {
-	_ = startReliably("../../scripts/start-etcd" + getShellExt())
+
 	echoServer := testStartServerledge(false, outboundIp)
 	return echoServer, nil
 }
 
 // run the bash script to stop serverledge
 func teardownServerledge(e *echo.Echo) error {
-	cmd1 := exec.CommandContext(context.Background(), getShell(), "../../scripts/stop-etcd"+getShellExt())
 
 	node.ShutdownAllContainers()
 
@@ -136,6 +193,5 @@ func teardownServerledge(e *echo.Echo) error {
 	errEcho := e.Shutdown(ctx)
 
 	errRegistry := registration.Deregister()
-	err1 := cmd1.Run()
-	return u.ReturnNonNilErr(errEcho, errRegistry, err1)
+	return u.ReturnNonNilErr(errEcho, errRegistry)
 }

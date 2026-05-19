@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -123,7 +124,7 @@ func Init() {
 	invokeCmd.Flags().StringSliceVarP(&params, "param", "p", nil, "Function parameter: <name>:<value>")
 	invokeCmd.Flags().StringVarP(&paramsFile, "params_file", "j", "", "File containing parameters (JSON)")
 	invokeCmd.Flags().BoolVarP(&asyncInvocation, "async", "a", false, "Asynchronous invocation")
-	invokeCmd.Flags().BoolVarP(&returnOutput, "ret_output", "o", false, "Capture function output (if supported by used runtime)")
+	invokeCmd.Flags().BoolVarP(&returnOutput, "return_output", "o", false, "Capture function output (if supported by used runtime)")
 
 	rootCmd.AddCommand(createCmd)
 	createCmd.Flags().BoolVarP(&update, "update", "u", false, "Overwrite any function with the same name")
@@ -166,6 +167,7 @@ func Init() {
 	rootCmd.AddCommand(compCreateCmd)
 	compCreateCmd.Flags().StringVarP(&compName, "workflow", "f", "", "name of the workflow")
 	compCreateCmd.Flags().StringVarP(&jsonSrc, "src", "s", "", "source Amazon States Language file  that defines the workflow")
+	compCreateCmd.Flags().BoolVarP(&update, "update", "u", false, "Update workflow (if exists)")
 
 	rootCmd.AddCommand(compDeleteCmd)
 	compDeleteCmd.Flags().StringVarP(&compName, "workflow", "f", "", "name of the workflow")
@@ -211,6 +213,10 @@ func invoke(cmd *cobra.Command, args []string) {
 	}
 	if len(paramsFile) > 0 {
 		jsonFile, err := os.Open(paramsFile)
+		if err != nil {
+			fmt.Printf("Could not open parameters file '%s'\n", paramsFile)
+			os.Exit(1)
+		}
 
 		defer func(jsonFile *os.File) {
 			err := jsonFile.Close()
@@ -326,10 +332,19 @@ func create(cmd *cobra.Command, args []string) {
 
 	var encoded string
 	if runtime != "custom" {
-		srcContent, err := ReadSourcesAsTar(src)
-		if err != nil {
-			fmt.Printf("%v\n", err)
-			os.Exit(3)
+		var srcContent []byte
+		u, err := url.ParseRequestURI(src)
+		if err == nil && u.Scheme != "" && u.Host != "" {
+			// src is a URL
+			fmt.Println(u)
+			srcContent = []byte(src)
+		} else {
+			// src is a folder; a tar has to be created to be uploaded to etcd
+			srcContent, err = ReadSourcesAsTar(src)
+			if err != nil {
+				fmt.Printf("%v\n", err)
+				os.Exit(3)
+			}
 		}
 		encoded = base64.StdEncoding.EncodeToString(srcContent)
 	} else {
@@ -516,6 +531,10 @@ func invokeWorkflow(cmd *cobra.Command, args []string) {
 	}
 	if len(paramsFile) > 0 {
 		jsonFile, err := os.Open(paramsFile)
+		if err != nil {
+			fmt.Printf("Could not open parameters file '%s'\n", paramsFile)
+			os.Exit(1)
+		}
 		defer jsonFile.Close()
 		byteValue, _ := io.ReadAll(jsonFile)
 		err = json.Unmarshal(byteValue, &paramsMap)
@@ -565,8 +584,10 @@ func createWorkflow(cmd *cobra.Command, args []string) {
 	}
 	encoded := base64.StdEncoding.EncodeToString(src)
 	request := client.WorkflowCreationRequest{
-		Name:   compName,
-		ASLSrc: encoded}
+		Name:              compName,
+		ASLSrc:            encoded,
+		OverwriteIfExists: update,
+	}
 
 	requestBody, err := json.Marshal(request)
 	if err != nil {

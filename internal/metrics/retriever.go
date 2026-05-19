@@ -2,9 +2,11 @@ package metrics
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/serverledge-faas/serverledge/internal/registration"
 	"log"
+	"os"
 	"time"
 
 	"github.com/prometheus/common/model"
@@ -201,6 +203,14 @@ func MetricsRetriever() {
 			}
 			retrievedMetrics.AvgEdgeInitTime = avgInitTimeAllNodes
 
+			query = fmt.Sprintf("%s{node=~\"\\\\(%s\\\\).*\"}/%s{node=~\"\\\\(%s\\\\).*\"}",
+				COLD_STARTS, localArea, COMPLETIONS, localArea)
+			coldStartProbPerFunction, err := retrieveByFunctionAndNode(query, api, ctx)
+			if err != nil {
+				log.Printf("Error in retrieveByFunction: %v", err)
+			}
+			retrievedMetrics.EdgeColdStartProbability = coldStartProbPerFunction
+
 			// CLOUD
 			cloudArea := config.GetString(config.REGISTRY_REMOTE_AREA, "")
 			if cloudArea != "" {
@@ -231,8 +241,24 @@ func MetricsRetriever() {
 				retrievedMetrics.AvgRemoteInitTime = make(map[string]float64)
 			}
 
-			fmt.Println("All queries completed")
 			fmt.Println(retrievedMetrics)
+
+			// TODO: configuration option
+			metricsJsonFilename := config.GetString(config.METRICS_DUMP_JSON_FILE, "")
+			if metricsJsonFilename != "" {
+				file, err := os.Create(metricsJsonFilename)
+				if err != nil {
+					log.Printf("Error in serializing metrics: %v", err)
+				} else {
+					encoder := json.NewEncoder(file)
+					encoder.SetIndent("", "  ") // Optional: for pretty printing
+					err = encoder.Encode(retrievedMetrics)
+					if err != nil {
+						log.Printf("Error in writing metrics to file: %v", err)
+					}
+					file.Close()
+				}
+			}
 		}
 	}
 
