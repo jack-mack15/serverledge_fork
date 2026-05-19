@@ -60,7 +60,7 @@ func registerToEtcd(asLoadBalancer bool) error {
 	log.Printf("Registration for node: %s\n", node.LocalNode)
 
 	defaultAddressStr := "127.0.0.1"
-	address, err := utils.GetOutboundIp()
+	address, err := utils.GetOutboundIp() //recupero indirizzo ip
 	if err == nil {
 		defaultAddressStr = address.String()
 	}
@@ -229,8 +229,8 @@ func Deregister() error {
 
 func StartMonitoring() error {
 
-	neighbors = make(map[string]NodeRegistration)
-	neighborInfo = make(map[string]*StatusInformation)
+	neighbors = make(map[string]NodeRegistration)      //network info
+	neighborInfo = make(map[string]*StatusInformation) //scheduling info
 
 	defaultConfig := vivaldi.DefaultConfig()
 	defaultConfig.Dimensionality = 3

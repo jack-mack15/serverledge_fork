@@ -25,7 +25,7 @@ func (n NodeID) String() string {
 }
 
 func NewIdentifier(area string) NodeID {
-	id := shortuuid.New() + strconv.FormatInt(time.Now().UnixNano(), 10)
+	id := shortuuid.New() + strconv.FormatInt(time.Now().UnixNano(), 10) //id creato sul momento
 	return NodeID{Area: area, Key: id}
 }
 

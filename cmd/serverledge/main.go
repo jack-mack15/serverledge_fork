@@ -31,10 +31,10 @@ func main() {
 	api.CacheSetup()
 
 	// register to etcd, this way server is visible to the others under a given local area
-	myArea := config.GetString(config.REGISTRY_AREA, "ROME")
+	myArea := config.GetString(config.REGISTRY_AREA, "ROME") //TODO implementare scelta regione con anchors
 	node.LocalNode = node.NewIdentifier(myArea)
 
-	err := registration.RegisterNode()
+	err := registration.RegisterNode() //-------------------------parte di mio interesse
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func main() {
 	// Workflow offloading policy
 	workflow.CreateOffloadingPolicy()
 
-	err = registration.StartMonitoring()
+	err = registration.StartMonitoring() //-------------------parte di mio interesse
 	if err != nil {
 		log.Fatal(err)
 	}
