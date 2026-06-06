@@ -3,6 +3,7 @@ package registration
 import (
 	"fmt"
 	"log"
+	"math"
 	"net"
 	"path"
 	"runtime"
@@ -24,6 +25,7 @@ import (
 
 const registryBaseDirectory = "registry"
 const registryLoadBalancerDirectory = "__lb"
+const anchorsBaseDirectory = "anchor"
 const etcdLeaseTTL = 120
 
 var mutex sync.RWMutex
@@ -55,6 +57,146 @@ func (r *NodeRegistration) APIUrl() (url string) {
 
 func areaEtcdKey(area string) string {
 	return fmt.Sprintf("%s/%s/", registryBaseDirectory, area)
+}
+
+func anchorsEtcdKey() string {
+	return fmt.Sprintf("%s/%s/", registryBaseDirectory, anchorsBaseDirectory)
+}
+
+// funzione che crea una nuova area edge e la aggiunge al registry
+func registerNewArea(nodeId string) (string, error) {
+	tempArea := "Area-" + nodeId
+	//aggiungo nuova area al registry
+	baseDir := areaEtcdKey(tempArea)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	//creo area con un valore useless
+	_, err := etcdClient.Put(ctx, baseDir, "initialized")
+	if err != nil {
+		return "", fmt.Errorf("impossibile craere la regione: %w", err)
+	}
+
+	return tempArea, nil
+}
+
+func JoinAreaPharos() error {
+	area, rtt, err := findAreaPharos()
+	if err != nil {
+		log.Fatal(err) //TODO come gestire l'errore?
+	}
+
+	if rtt.Milliseconds() >= config.MAX_AREA_DISTANCE {
+		area = "" //necessito di creare una nuova regione, per ora la lascio vuota e creo NodeId
+	}
+
+	myId := config.GetString(config.REGISTRY_NODE_ID, "")
+	if myId == "" {
+		node.LocalNode = node.NewRandomIdentifier(area)
+	} else {
+		node.LocalNode = node.NewIdentifier(myId, area)
+	}
+	log.Printf("Local node id: %s (arch: %v)", node.LocalNode.String(), node.LocalNode.Arch)
+
+	//entro se devo creare una nuova area
+	if area == "" {
+		area, err = registerNewArea(node.LocalNode.Key)
+		if err != nil {
+			log.Fatal(err) //TODO come gestire l'errore?
+		}
+		node.LocalNode.Area = area
+
+		//aggiunta della nuova anchor, ovvero nodo corrente
+		anchorDir := anchorsEtcdKey()
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		//recupero indirizzo ip
+		defaultAddressStr := "127.0.0.1"
+		address, err := utils.GetOutboundIp()
+		if err == nil {
+			defaultAddressStr = address.String()
+		}
+		//recupero porta udp
+		port := config.GetInt(config.LISTEN_UDP_PORT, 9876)
+
+		temp := fmt.Sprintf("%s/%s:%d", area, defaultAddressStr, port)
+
+		//aggiungo la nuova anchor nella lista di anchor: AreaName/IPAnchor:Port
+		_, err = etcdClient.Put(ctx, anchorDir, temp)
+		if err != nil {
+			return fmt.Errorf("impossibile aggiungere nuova anchor: %w", err)
+		}
+	}
+	return nil
+}
+
+func findAreaPharos() (string, time.Duration, error) {
+	prefix := anchorsEtcdKey()
+
+	ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+
+	//resp conterrà tutte le chiavi "AreaName/anchorIP:anchorPort"
+	resp, err := etcdClient.Get(ctx, prefix, clientv3.WithPrefix())
+	if err != nil {
+		fmt.Println(err)
+		utils.TriggerEtcdReconnection()
+		return "", 0, err
+	}
+
+	anchors := make([]NodeRegistration, 0)
+
+	for _, kv := range resp.Kvs {
+		fullKey := string(kv.Key)
+		parts := strings.Split(fullKey, "/")
+		if len(parts) != 2 {
+			//ignore current anchor
+			continue
+		}
+		areaName := parts[0]
+		ipPort := parts[1]
+		ip, portStr, err := net.SplitHostPort(ipPort)
+		if err != nil {
+			fmt.Printf("Error parsing anchor %s: %v\n", areaName, err)
+		}
+
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			fmt.Println("Errore: la stringa non è un numero valido!", err)
+			return "", 0, err
+		}
+
+		newAnchor := NodeRegistration{
+			NodeID: node.NodeID{
+				Area: areaName,
+			},
+			IPAddress:      ip,
+			APIPort:        0,
+			UDPPort:        port,
+			IsLoadBalancer: false, //TODO ogni anchor è un load balancer o possono esserlo?
+		}
+
+		anchors = append(anchors, newAnchor)
+	}
+
+	minAreaName := ""
+	minRtt := time.Duration(math.MaxInt64)
+
+	for _, anchor := range anchors {
+		newInfo, rtt := statusInfoRequest(&anchor)
+
+		if newInfo == nil {
+			log.Printf("Unreachable neighbor: %s\n", anchor.Area)
+			continue
+		}
+		if rtt < minRtt {
+			minRtt = rtt
+			minAreaName = anchor.Area
+		}
+	}
+
+	return minAreaName, minRtt, err
 }
 
 // RegisterNode make a registration to the local Area
@@ -179,7 +321,7 @@ func GetNodesInArea(area string, includeSelf bool, limit int64) (map[string]Node
 			continue
 		}
 
-		reg, err := parseEtcdRegisteredNode(area, key, s.Value)
+		reg, err := parseEtcdRegisteredNode(area, key, s.Value) //ritorna il nodo con le info di network
 		if err == nil {
 			servers[key] = reg
 			//fmt.Printf("Server found: %v (%v-udp:%d)\n", servers[key], reg.IPAddress, reg.UDPPort)
@@ -296,8 +438,8 @@ func globalMonitoring() {
 		}
 	}
 
-	updateRemoteOffloadingTarget()
-	updateLatencyToOffloadingTarget()
+	updateRemoteOffloadingTarget()    //ottiene un nodo per offloading
+	updateLatencyToOffloadingTarget() //aggiorna la latenza con tale nodo
 }
 
 func updateLatencyToOffloadingTarget() {
@@ -326,6 +468,8 @@ func tcpLatency(hostAndPort string) (float64, error) {
 	return float64(time.Since(start).Milliseconds()), nil
 }
 
+// aggiorna il nodo di offloading. prima verifica se l'area cloud ha un lb e in caso sceglie quello,
+// altrimenti cerca un nodo nella propria area.
 func updateRemoteOffloadingTarget() {
 	// If there is a LB in the remote area, it is used.
 	// Otherwise, a random node in the area is chosen.
@@ -363,6 +507,7 @@ func computeNearestNeighbors(nNeighbors int) {
 		distance time.Duration
 	}
 
+	//all neighbors are considered the nearest
 	if nNeighbors > len(neighborInfo) {
 		nearestNeighbors = make([]NodeRegistration, 0, len(neighborInfo))
 		for _, n := range neighbors {
@@ -397,7 +542,7 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 	mutex.RUnlock()
 
 	for _, registeredNode := range peersToUpdate {
-		newInfo, rtt := statusInfoRequest(&registeredNode)
+		newInfo, rtt := statusInfoRequest(&registeredNode) //recupero RTT e coordinate in status info
 
 		if newInfo == nil {
 			log.Printf("Unreachable neighbor: %s\n", registeredNode.NodeID)
@@ -408,7 +553,8 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 		neighborInfo[registeredNode.Key] = newInfo
 		neighborInfo[registeredNode.Key].LastUpdateTime = time.Now().Unix()
 
-		_, err := vivaldiClient.Update("node", &newInfo.Coordinates, rtt)
+		//_, err := vivaldiClient.Update("node", &newInfo.Coordinates, rtt)		OLD
+		_, err := vivaldiClient.Update(registeredNode.NodeID.Key, &newInfo.Coordinates, rtt) //NEW
 		if err != nil {
 			log.Printf("Error while updating node coordinates: %s\n", err)
 		}
@@ -416,7 +562,7 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 	}
 
 	// Updates neighborInfo with the N closest nodes from serverMap
-	computeNearestNeighbors(2) //todo change this value
+	computeNearestNeighbors(2) //todo change this value, maybe tutti i nodi devono essere considerati (nodi stessa area)
 }
 
 func GetNearestNeighbors() []NodeRegistration {
