@@ -30,6 +30,11 @@ func main() {
 	//setting up cache parameters
 	api.CacheSetup()
 
+	myArch := config.GetString(config.NODE_ARCHITECTURE, "")
+	if myArch != "" {
+		node.LocalNode.Arch = myArch // otherwise, the auto-detected value is kept
+	}
+
 	// register to etcd, this way server is visible to the others under a given local area
 	//myArea := config.GetString(config.REGISTRY_AREA, "ROME") //TODO change
 	myArea := config.GetString(config.REGISTRY_AREA, "")
@@ -39,11 +44,15 @@ func main() {
 		if err != nil {
 			return //TODO gestire bene errori
 		}
-	}
-
-	myArch := config.GetString(config.NODE_ARCHITECTURE, "")
-	if myArch != "" {
-		node.LocalNode.Arch = myArch // otherwise, the auto-detected value is kept
+	} else {
+		//old configuration
+		myId := config.GetString(config.REGISTRY_NODE_ID, "")
+		if myId == "" {
+			node.LocalNode = node.NewRandomIdentifier(myArea)
+		} else {
+			node.LocalNode = node.NewIdentifier(myId, myArea)
+		}
+		log.Printf("Local node id: %s", node.LocalNode.String())
 	}
 
 	err := registration.RegisterNode() //se un nodo crea area, qui si aggiunge come nodo dell'area

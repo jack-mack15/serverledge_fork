@@ -163,4 +163,9 @@ const WORKFLOW_SAVE_FUNCTION_INPUT_TO_FILE = "workflow.profiling.saveinput"
 const LOAD_BALANCER_POLICY = "loadbalancer.policy"
 const LOAD_BALANCER_TARGET_UPDATE_INTERVAL = "loadbalancer.targets.interval"
 
+// ADDED BY MACCARI
+// Max diameter for a zone
 const MAX_AREA_DISTANCE = 200
+
+// Max number of near nodes that vivaldi computes
+const MAX_VIVALDI_NEAR_NODES = 16

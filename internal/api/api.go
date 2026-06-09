@@ -294,7 +294,7 @@ func GetServerStatus(c echo.Context) error {
 	// With this order of execution, we are sure that the lock is never taken recursively, avoiding said deadlock.
 
 	warmStatus := node.WarmStatus()
-	coords := *registration.VivaldiClient.GetCoordinate()
+	coords := *registration.LocalVivaldiClient.GetCoordinate()
 
 	loadAvg, err := loadavg.Parse()
 	loadAvgValues := []float64{-1.0, -1.0, -1.0}

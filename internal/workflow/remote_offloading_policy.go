@@ -230,7 +230,7 @@ func prepareParameters(r *Request, p *Progress) *remotePolicyParams {
 		if !slices.Contains(params.EdgeNodes, key1) {
 			continue
 		}
-		distance = registration.VivaldiClient.DistanceTo(&v1.Coordinates).Seconds() / 2
+		distance = registration.LocalVivaldiClient.DistanceTo(&v1.Coordinates).Seconds() / 2
 		params.NodeLatency[tupleKey(LOCAL, key1)] = distance
 		params.NodeLatency[tupleKey(key1, LOCAL)] = distance
 
