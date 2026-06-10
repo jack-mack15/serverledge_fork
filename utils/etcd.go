@@ -3,12 +3,12 @@ package utils
 import (
 	"context"
 	"fmt"
-	"google.golang.org/grpc/connectivity"
 	"log"
 	"sync"
 	"time"
 
-	"github.com/serverledge-faas/serverledge/internal/config"
+	"google.golang.org/grpc/connectivity"
+
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
@@ -31,7 +31,8 @@ func GetEtcdClient() (*clientv3.Client, error) {
 	}
 
 	log.Println("Connecting to etcd")
-	etcdHost := config.GetString(config.ETCD_ADDRESS, "localhost:2379")
+	//etcdHost := config.GetString(config.ETCD_ADDRESS, "localhost:2379")
+	etcdHost := "127.0.0.1:2379"
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{etcdHost},
 		DialTimeout: 3 * time.Second,

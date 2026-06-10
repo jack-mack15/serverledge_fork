@@ -86,6 +86,13 @@ func registerNewArea(nodeId string) (string, error) {
 }
 
 func JoinAreaPharos() error {
+	var err error
+	etcdClient, err = utils.GetEtcdClient()
+	if err != nil {
+		log.Fatal(UnavailableClientErr)
+		return UnavailableClientErr
+	}
+
 	area, rtt, err := findAreaPharos()
 	if err != nil {
 		log.Fatal(err) //TODO come gestire l'errore?
@@ -109,6 +116,8 @@ func JoinAreaPharos() error {
 		if err != nil {
 			log.Fatal(err) //TODO come gestire l'errore?
 		}
+
+		log.Println("New area registered: " + area)
 		node.LocalNode.Area = area
 
 		//aggiunta della nuova anchor, ovvero nodo corrente
@@ -134,17 +143,19 @@ func JoinAreaPharos() error {
 		if err != nil {
 			return fmt.Errorf("impossibile aggiungere nuova anchor: %w", err)
 		}
+	} else {
+		node.LocalNode.Area = area
 	}
+	fmt.Println("Automatica area joined: " + node.LocalNode.Area)
 	return nil
 }
 
 // funzione che ritorna tutte le anchor registrate in Etcd
 func getPharosAnchors() (map[string]NodeRegistration, error) {
 	prefix := anchorsEtcdKey()
-
 	ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
 
-	//resp conterrà tutte le chiavi "AreaName/anchorName/anchorIP:APIPort:UDPPort:arch"
+	//resp conterrà tutte le chiavi "AreaName/anchorName/anchorIP;APIPort;UDPPort;arch"
 	resp, err := etcdClient.Get(ctx, prefix, clientv3.WithPrefix())
 	if err != nil {
 		fmt.Println(err)
@@ -156,17 +167,18 @@ func getPharosAnchors() (map[string]NodeRegistration, error) {
 
 	for _, kv := range resp.Kvs {
 		fullKey := string(kv.Key)
+		//per ora ho registry/anchor/areaName/nodeName/
 		parts := strings.Split(fullKey, "/")
-		if len(parts) != 3 {
+		if len(parts) != 4 {
 			//ignore current anchor
 			continue
 		}
-		areaName := parts[0]
-		nodeKey := parts[1]
-		payload := parts[2]
+		areaName := parts[2]
+		nodeKey := parts[3]
+		payload := kv.Value
 
 		//creo il nodo ancora
-		newAnchor, err := parseEtcdRegisteredNode(areaName, nodeKey, []byte(payload))
+		newAnchor, err := parseEtcdRegisteredNode(areaName, nodeKey, payload)
 		if err != nil {
 			continue
 		}
@@ -180,19 +192,21 @@ func findAreaPharos() (string, time.Duration, error) {
 
 	anchors, err := getPharosAnchors()
 	if err != nil {
+		fmt.Println("No anchors found")
 		return "", 0, err
 	}
 
 	minAreaName := ""
 	minRtt := time.Duration(math.MaxInt64)
 
-	for _, anchor := range anchors {
+	for key, anchor := range anchors {
 		newInfo, rtt := statusInfoRequest(&anchor)
 
 		if newInfo == nil {
 			log.Printf("Unreachable neighbor: %s\n", anchor.Area)
 			continue
 		}
+		fmt.Println("Correctly contacted anchor " + key + " with RTT: " + rtt.String())
 		if rtt < minRtt {
 			minRtt = rtt
 			minAreaName = anchor.Area

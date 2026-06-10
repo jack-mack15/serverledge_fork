@@ -26,7 +26,7 @@ func main() {
 		configFileName = os.Args[1]
 	}
 	config.ReadConfiguration(configFileName)
-
+	fmt.Println("Starting serverledge...")
 	//setting up cache parameters
 	api.CacheSetup()
 
