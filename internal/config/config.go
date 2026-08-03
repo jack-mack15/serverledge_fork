@@ -100,8 +100,11 @@ func ReadConfiguration(fileName string) {
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// No configuration file parsed
+			log.Println("ATTENTION: No config file found")
 		} else {
 			log.Printf("Config file parsing failed!\n")
 		}
+	} else {
+		log.Println("Configuration file correctly loaded")
 	}
 }

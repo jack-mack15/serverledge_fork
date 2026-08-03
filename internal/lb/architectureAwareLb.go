@@ -14,6 +14,7 @@ import (
 	"github.com/serverledge-faas/serverledge/internal/config"
 	"github.com/serverledge-faas/serverledge/internal/container"
 	"github.com/serverledge-faas/serverledge/internal/function"
+	"github.com/serverledge-faas/serverledge/internal/hashring"
 	"github.com/serverledge-faas/serverledge/internal/mab"
 )
 
@@ -21,8 +22,8 @@ type ArchitectureAwareBalancer struct {
 	mu sync.Mutex
 
 	// instead of classic lists we will use hashRings (see hashRing.go) to implement a consistent hashing technique
-	armRing *HashRing
-	x86Ring *HashRing
+	armRing *hashring.HashRing
+	x86Ring *hashring.HashRing
 
 	mode        string
 	archRRIndex int
@@ -39,8 +40,8 @@ func NewArchitectureAwareBalancer(targets []*middleware.ProxyTarget) *Architectu
 	log.Printf("Running ArchitectureAwareLB with %d replicas per node in the hash rings\n", REPLICAS)
 
 	b := &ArchitectureAwareBalancer{
-		armRing:     NewHashRing(REPLICAS),
-		x86Ring:     NewHashRing(REPLICAS),
+		armRing:     hashring.NewHashRing(REPLICAS),
+		x86Ring:     hashring.NewHashRing(REPLICAS),
 		archRRIndex: 0,
 		armRRIndex:  0,
 		x86RRIndex:  0,
@@ -73,20 +74,20 @@ func (b *ArchitectureAwareBalancer) Next(c echo.Context) *middleware.ProxyTarget
 		// fallback to round-robin
 		var candidate *middleware.ProxyTarget
 		var arch string
-		if len(b.armRing.targetList) == 0 {
+		if len(b.armRing.TargetList) == 0 {
 			arch = container.X86
-		} else if len(b.x86Ring.targetList) == 0 {
+		} else if len(b.x86Ring.TargetList) == 0 {
 			arch = container.ARM
 		} else {
 			arch = b.selectArchitectureRR()
 		}
 
 		if arch == container.ARM {
-			b.armRRIndex = (b.armRRIndex + 1) % len(b.armRing.targetList)
-			candidate = b.armRing.targetList[b.armRRIndex]
+			b.armRRIndex = (b.armRRIndex + 1) % len(b.armRing.TargetList)
+			candidate = b.armRing.TargetList[b.armRRIndex]
 		} else {
-			b.x86RRIndex = (b.x86RRIndex + 1) % len(b.x86Ring.targetList)
-			candidate = b.x86Ring.targetList[b.x86RRIndex]
+			b.x86RRIndex = (b.x86RRIndex + 1) % len(b.x86Ring.TargetList)
+			candidate = b.x86Ring.TargetList[b.x86RRIndex]
 		}
 		return candidate
 	}

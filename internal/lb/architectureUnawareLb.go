@@ -12,13 +12,14 @@ import (
 	"github.com/serverledge-faas/serverledge/internal/config"
 	"github.com/serverledge-faas/serverledge/internal/container"
 	"github.com/serverledge-faas/serverledge/internal/function"
+	"github.com/serverledge-faas/serverledge/internal/hashring"
 )
 
 type ArchitectureUnawareBalancer struct {
 	mu sync.Mutex
 
 	// instead of classic lists we will use hashRings (see hashRing.go) to implement a consistent hashing technique
-	hashRing *HashRing
+	hashRing *hashring.HashRing
 
 	// round-robin: used for non-invocation requests
 	rrIndex int
@@ -33,7 +34,7 @@ func NewArchitectureUnawareBalancer(targets []*middleware.ProxyTarget) *Architec
 	log.Printf("Running ArchitectureUNawareLB with %d replicas per node in the hash ring\n", REPLICAS)
 
 	b := &ArchitectureUnawareBalancer{
-		hashRing: NewHashRing(REPLICAS),
+		hashRing: hashring.NewHashRing(REPLICAS),
 	}
 
 	log.Printf("Starting Architecture UNAWARE Lb\n")
@@ -59,8 +60,8 @@ func (b *ArchitectureUnawareBalancer) Next(c echo.Context) *middleware.ProxyTarg
 
 	if !isInvoke(c) {
 		// fallback to round-robin
-		b.rrIndex = (b.rrIndex + 1) % len(b.hashRing.targetList)
-		candidate := b.hashRing.targetList[b.rrIndex]
+		b.rrIndex = (b.rrIndex + 1) % len(b.hashRing.TargetList)
+		candidate := b.hashRing.TargetList[b.rrIndex]
 		log.Printf("Forwarding %s request to target %s\n", c.Path(), candidate.Name)
 		return candidate
 	}

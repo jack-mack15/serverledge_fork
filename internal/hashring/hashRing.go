@@ -1,4 +1,4 @@
-package lb
+package hashring
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ type HashRing struct {
 	ring     []uint32                           // actual ring with hash of nodes
 	targets  map[uint32]*middleware.ProxyTarget // mapping hash(es) <-> node. Each node will have #replicas entries in the ring
 	// function to check if the node selected has enough memory to execute the function
-	targetList []*middleware.ProxyTarget // list of target. Cached instead of iterating on targets every time.
+	TargetList []*middleware.ProxyTarget // list of target. Cached instead of iterating on targets every time.
 	memChecker MemoryChecker             // implemented this way to make the code testable by mocking this struct/function.
 
 }
@@ -26,7 +26,7 @@ func NewHashRing(replicas int) *HashRing {
 		replicas:   replicas,
 		ring:       make([]uint32, 0),
 		targets:    make(map[uint32]*middleware.ProxyTarget),
-		targetList: make([]*middleware.ProxyTarget, 0),
+		TargetList: make([]*middleware.ProxyTarget, 0),
 		memChecker: &DefaultMemoryChecker{},
 	}
 }
@@ -40,7 +40,7 @@ func (r *HashRing) Add(t *middleware.ProxyTarget) {
 		r.targets[h] = t
 	}
 	sort.Slice(r.ring, func(i, j int) bool { return r.ring[i] < r.ring[j] }) // sort the ring by hash
-	r.targetList = append(r.targetList, t)
+	r.TargetList = append(r.TargetList, t)
 }
 
 func (r *HashRing) Get(fun *function.Function) *middleware.ProxyTarget {
@@ -66,7 +66,7 @@ func (r *HashRing) Get(fun *function.Function) *middleware.ProxyTarget {
 	startingIdx := idx            // idx is still set to the candidate index in the ring
 	idx = (idx + 1) % len(r.ring) // next node in the ring
 
-	// since there are multiple replicas of every physical node, I'll keep track of nodes already considered as candiadates
+	// since there are multiple replicas of every physical node, I'll keep track of nodes already considered as candidates
 	// to skip them and make the lookup faster.
 	// E.g.: if the first candidate was node "Node-A", found by its replica "Node-A#1", there is no point in trying to see
 	// if "Node-A" has enough memory once I find it through its replica "Node-A#2", for example, that I may find while
@@ -88,6 +88,57 @@ func (r *HashRing) Get(fun *function.Function) *middleware.ProxyTarget {
 
 	return nil // no suitable node found
 
+}
+
+// variante di Get che ritorna i primi max elementi successivi (e disponibili) data una funzione
+func (r *HashRing) GetMultiple(fun *function.Function, max int) []*middleware.ProxyTarget {
+	if len(r.ring) == 0 {
+		return nil
+	}
+
+	if len(r.ring) < max {
+		max = len(r.ring)
+	}
+
+	h := hash(fun.Name)
+	idx := sort.Search(len(r.ring), func(i int) bool { return r.ring[i] >= h })
+	if idx == len(r.ring) {
+		idx = 0
+	}
+
+	startingIdx := idx
+	//per le repliche di nodi già visti
+	seen := make(map[string]struct{})
+
+	targets := make([]*middleware.ProxyTarget, 0, max)
+
+	for {
+		candidate := r.targets[r.ring[idx]]
+		_, alreadySeen := seen[candidate.Name]
+		if !alreadySeen {
+			seen[candidate.Name] = struct{}{}
+
+			//test se ha sufficiente memoria
+			if r.memChecker.HasEnoughMemory(candidate, fun) {
+				targets = append(targets, candidate)
+
+				//controllo se ho preso i primi max nodi
+				if len(targets) == max {
+					break
+				}
+			}
+		}
+
+		//incremento con attenzione al wrap around
+		idx = (idx + 1) % len(r.ring)
+
+		//controllo di sicurezza per uscire se vedo tutto l'anello
+		if idx == startingIdx {
+			break
+		}
+	}
+
+	return targets
 }
 
 func (r *HashRing) RemoveByName(name string) bool {
@@ -116,24 +167,24 @@ func (r *HashRing) RemoveByName(name string) bool {
 }
 
 func (r *HashRing) removeFromTargetList(targetName string) {
-	newList := r.targetList[:0]
-	for _, t := range r.targetList {
+	newList := r.TargetList[:0]
+	for _, t := range r.TargetList {
 		if t.Name != targetName {
 			newList = append(newList, t)
 		}
 	}
-	r.targetList = newList
+	r.TargetList = newList
 }
 
 // Size returns the number of UNIQUE nodes in the ring, not the numbers of total nodes (which is = nUniqueNodes * Replicas)
 func (r *HashRing) Size() int {
 
-	return len(r.targetList)
+	return len(r.TargetList)
 
 }
 
 func (r *HashRing) GetAllTargets() []*middleware.ProxyTarget {
-	return r.targetList
+	return r.TargetList
 }
 
 // hash function uses the FNV-1a function. It has good distribution and is fast to compute. It's not cryptographically safe,

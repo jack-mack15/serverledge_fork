@@ -40,7 +40,7 @@ func main() {
 	myArea := config.GetString(config.REGISTRY_AREA, "")
 	if myArea == "" {
 		//PHAROS automatic area join
-		err := registration.JoinAreaPharos()
+		err := registration.JoinConsistentHashArea()
 		if err != nil {
 			return //TODO gestire bene errori
 		}
@@ -53,11 +53,11 @@ func main() {
 			node.LocalNode = node.NewIdentifier(myId, myArea)
 		}
 		log.Printf("Local node id: %s", node.LocalNode.String())
-	}
 
-	err := registration.RegisterNode() //se un nodo crea area, qui si aggiunge come nodo dell'area
-	if err != nil {
-		log.Fatal(err)
+		err := registration.RegisterNode()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	metrics.Init()
@@ -87,13 +87,13 @@ func main() {
 	api.RegisterTerminationHandler(e)
 
 	// Function scheduling policy
-	schedulingPolicy := api.CreateSchedulingPolicy()
+	schedulingPolicy := api.CreateSchedulingPolicy() //qui imposto la policy
 	go scheduling.Run(schedulingPolicy)
 
 	// Workflow offloading policy
 	workflow.CreateOffloadingPolicy()
 
-	err = registration.StartMonitoring()
+	err := registration.StartMonitoring()
 	if err != nil {
 		log.Fatal(err)
 	}

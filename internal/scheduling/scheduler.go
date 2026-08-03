@@ -178,3 +178,29 @@ func handleCloudOffload(r *scheduledRequest) {
 		dropRequest(r)
 	}
 }
+
+func handleHashRingOffload(r *scheduledRequest) {
+	//cerco nodo target sull'hash ring
+	offloadingTarget := registration.GetTargetFromHashRing(r.Fun)
+
+	if offloadingTarget == nil {
+		//se hash ring non trova, opto per il cloud. se non si riesce con il cloud, effettuo il drop
+		log.Println("Consistent Hash: offloading in cloud")
+		handleCloudOffload(r)
+		return
+	}
+
+	//il nodo corrente deve gestire l'esecuzione
+	if offloadingTarget.Key == node.LocalNode.Key {
+		containerID, warm, err := node.AcquireContainer(r.Fun, false)
+		if err == nil {
+			log.Println("Consistent Hash: execution locally")
+			execLocally(r, containerID, warm)
+			return
+		}
+
+		return
+	}
+	log.Println("Consistent Hash: offloading in edge")
+	handleOffload(r, offloadingTarget.APIUrl())
+}

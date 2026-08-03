@@ -169,3 +169,8 @@ const MAX_AREA_DISTANCE = 200
 
 // Max number of near nodes that vivaldi computes
 const MAX_VIVALDI_NEAR_NODES = 16
+
+// Is consistent hashing activated
+const IS_CONSISTENT_HASH = false
+const CENTROID_TIMER = 1000
+const RADIUS_TIMER = 1000

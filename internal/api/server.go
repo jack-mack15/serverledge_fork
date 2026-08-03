@@ -117,6 +117,8 @@ func CreateSchedulingPolicy() scheduling.Policy {
 		return &scheduling.CloudEdgePolicy{}
 	} else if policyConf == "edgeonly" {
 		return &scheduling.EdgePolicy{}
+	} else if policyConf == "consistenthash" {
+		return &scheduling.ConsistentHashPolicy{}
 	} else { // default, localonly
 		return &scheduling.DefaultLocalPolicy{}
 	}

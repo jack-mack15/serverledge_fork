@@ -2,6 +2,7 @@ package registration
 
 import (
 	"errors"
+	"time"
 
 	"github.com/hexablock/vivaldi"
 	"github.com/serverledge-faas/serverledge/internal/node"
@@ -28,4 +29,35 @@ type StatusInformation struct {
 	Coordinates             vivaldi.Coordinate
 	LoadAvg                 []float64
 	LastUpdateTime          int64 // timestamp of last update of this information
+}
+
+type AnchorResponse struct {
+	Type        byte
+	Coordinates vivaldi.Coordinate
+	Radius      int64
+}
+
+type GeneralRequest struct {
+	Type   byte
+	NodeId string
+}
+
+type ArchAPIResponse struct {
+	Arch    string
+	APIPort int
+}
+
+type FailureInfo struct {
+	NodeKey   string
+	DeadTimes int
+	LastSeen  int64
+}
+
+func (f *FailureInfo) NodeAlive() {
+	f.DeadTimes = 0
+	f.LastSeen = time.Now().UnixMilli()
+}
+
+func (f *FailureInfo) NodeDead() {
+	f.DeadTimes++
 }
