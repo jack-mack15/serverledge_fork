@@ -165,12 +165,15 @@ const LOAD_BALANCER_TARGET_UPDATE_INTERVAL = "loadbalancer.targets.interval"
 
 // ADDED BY MACCARI
 // Max diameter for a zone
-const MAX_AREA_DISTANCE = 200
+const MAX_AREA_DISTANCE = "max.area.distance"
 
 // Max number of near nodes that vivaldi computes
-const MAX_VIVALDI_NEAR_NODES = 16
+const MAX_VIVALDI_NEAR_NODES = "max.vivaldi.near.nodes"
 
 // Is consistent hashing activated
-const IS_CONSISTENT_HASH = false
-const CENTROID_TIMER = 1000
-const RADIUS_TIMER = 1000
+const IS_CONSISTENT_HASH = "is.consistent.hash"
+const HASH_RING_TARGETS = "hashring.targets"
+const CENTROID_TIMER = "centroid.timer"
+const RADIUS_TIMER = "radius.timer"
+const OLD_NODES_TO_NOTIFY = "old.nodes.to.notify.percent"
+const CONSISTENT_HASH_WEIGHT = "consistent.hash.weight"

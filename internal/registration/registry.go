@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/hexablock/vivaldi"
+	"github.com/serverledge-faas/serverledge/internal/hashring"
 	"github.com/serverledge-faas/serverledge/internal/node"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -144,6 +145,9 @@ func CheckNewNode(key string, addr string, port int) {
 				copy(neighborFailureInfos[i:], neighborFailureInfos[i+1:])
 				neighborFailureInfos[len(neighborFailureInfos)-1] = temp
 				temp.NodeAlive()
+				if config.GetBool(config.IS_CONSISTENT_HASH, false) {
+					hashring.RemoveOfflineSuspect(temp.NodeKey)
+				}
 				break
 			}
 		}
@@ -158,6 +162,9 @@ func handleNeighborTimeout(node *NodeRegistration) {
 		temp := neighborFailureInfos[i]
 		if temp.NodeKey == node.Key {
 			temp.NodeDead()
+			if config.GetBool(config.IS_CONSISTENT_HASH, false) {
+				hashring.AddOfflineSuspect(node.Key)
+			}
 			break
 		}
 	}
@@ -355,7 +362,7 @@ func findAreaPharos() (string, error) {
 		}
 		//fmt.Println("Correctly contacted anchor " + key + " with RTT: " + rtt.String())
 
-		if currRad == 0 && rtt.Milliseconds() < config.MAX_AREA_DISTANCE {
+		if currRad == 0 && rtt.Milliseconds() < (int64)(time.Duration(config.GetInt(config.MAX_AREA_DISTANCE, 200))*time.Millisecond) {
 			minRtt = rtt
 			minAreaName = anchor.Area
 			continue
@@ -508,66 +515,47 @@ func GetRandomRemoteNodes(area string, includeSelf bool, limit int64, maxRandom 
 }
 
 // come GetRandomNodesInArea() ma ritorna maxRandom elementi vicini presi randomicamente
-func GetRandomNodesInArea(area string, includeSelf bool, limit int64, maxRandom int) (map[string]NodeRegistration, error) {
-	baseDir := areaEtcdKey(area)
-	lbPrefix := path.Join(baseDir, registryLoadBalancerDirectory)
+func getRandomAndOldNodes(max int, oldPercent int) []NodeRegistration {
+	nodes := make([]NodeRegistration, 0)
 
-	ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+	failureMu.Lock()
+	defer failureMu.Unlock()
 
-	if limit < 0 {
-		limit = 0 // no limit
+	//creo una copia da cui eliminare i nodi estratti
+	failureCopy := make([]*FailureInfo, len(neighborFailureInfos))
+	copy(failureCopy, neighborFailureInfos)
+
+	//controllo sulla lunghezza della slice
+	if len(failureCopy) < max {
+		max = len(failureCopy)
 	}
+	howManyOld := (max * oldPercent) / 100
+	remain := max - howManyOld
 
-	resp, err := etcdClient.Get(ctx, baseDir, clientv3.WithPrefix(), clientv3.WithLimit(limit))
-	if err != nil {
-		utils.TriggerEtcdReconnection()
-		return nil, fmt.Errorf("Could not read from etcd: %v", err)
-	}
+	//prendo i nodi da contattare con timestamp più vecchio
+	oldNodes := failureCopy[:howManyOld]
 
-	//come originale ma salvo tutti i server
-	allServers := make(map[string]NodeRegistration)
-	for _, s := range resp.Kvs {
-		if strings.HasPrefix(string(s.Key), lbPrefix) {
-			// skip LB
-			continue
-		}
-		key := path.Base(string(s.Key))
-		if !includeSelf && area == SelfRegistration.Area && key == SelfRegistration.Key {
-			continue
-		}
+	//elimino i nodi appena estratti
+	failureCopy = failureCopy[howManyOld:]
 
-		reg, err := parseEtcdRegisteredNode(area, key, s.Value)
-		if err == nil {
-			allServers[key] = reg
-		}
-	}
-
-	//qui la grossa modifica
-	//ritorno tutti anche se maxRandom <= 0
-	if maxRandom <= 0 || len(allServers) <= maxRandom {
-		return allServers, nil
-	}
-
-	//creo una slice in cui metto le chiavi e poi le mischio
-	keys := make([]string, 0, len(allServers))
-	for k := range allServers {
-		keys = append(keys, k)
-	}
-
-	//qui mischio le chiavi
-	rand.Shuffle(len(keys), func(i, j int) {
-		keys[i], keys[j] = keys[j], keys[i]
+	//mescolo i restanti nodi da contattare per la scelta randomica
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r.Shuffle(len(failureCopy), func(i, j int) {
+		failureCopy[i], failureCopy[j] = failureCopy[j], failureCopy[i]
 	})
 
-	//creo la map finale
-	randomServers := make(map[string]NodeRegistration, maxRandom)
-	//dallo slice mischiato prendo solo i primi maxRandom
-	for i := 0; i < maxRandom; i++ {
-		randomKey := keys[i]
-		randomServers[randomKey] = allServers[randomKey]
+	randNodes := failureCopy[:remain]
+
+	//aggiungo i nodi estratti al risultato
+	for _, info := range oldNodes {
+		nodes = append(nodes, *GetPeerFromKey(info.NodeKey))
 	}
 
-	return randomServers, nil
+	for _, info := range randNodes {
+		nodes = append(nodes, *GetPeerFromKey(info.NodeKey))
+	}
+
+	return nodes
 }
 
 // ritorna max nodi vicini o remoti in modo randomico dalla propria lista di nodi conosciuti
@@ -782,7 +770,8 @@ func monitorFailure() {
 func deadCollector() {
 	fmt.Println("Dead Collector in action")
 	failureMu.Lock()
-	for i := range neighborFailureInfos {
+
+	for i := len(neighborFailureInfos) - 1; i >= 0; i-- {
 		curr := neighborFailureInfos[i]
 		if (time.Now().UnixMilli()-curr.LastSeen) > 2000 || curr.DeadTimes > 3 {
 			//nodo da rimuovere
@@ -1029,7 +1018,7 @@ func computeNearestNeighbors(nNeighbors int) {
 // remoteMonitoring check remote node's status
 func remoteMonitoring(vivaldiClient *vivaldi.Client) {
 	//log.Printf("Periodic remote Monitoring\n")
-	peersToUpdate := getRandomNodes(true, config.MAX_VIVALDI_NEAR_NODES)
+	peersToUpdate := getRandomNodes(true, config.GetInt(config.MAX_VIVALDI_NEAR_NODES, 16))
 	if len(peersToUpdate) == 0 {
 		return
 	}
@@ -1071,8 +1060,15 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 		peersToUpdate = append(peersToUpdate, reg)
 	}
 	mutex.RUnlock()*/
-
-	peersToUpdate := getRandomNodes(false, config.MAX_VIVALDI_NEAR_NODES) //risposta al todo
+	var peersToUpdate []NodeRegistration
+	//se c'è consistent hash attivo, ottengo i nodi più "vecchi" (per timestamp) e altri nodi in modo randomico.
+	//se invece non vi è consistent hash, ottengo solo i nodi in modo randomico
+	if config.GetBool(config.IS_CONSISTENT_HASH, false) {
+		peersToUpdate = getRandomAndOldNodes(config.GetInt(config.MAX_VIVALDI_NEAR_NODES, 16),
+			config.GetInt(config.OLD_NODES_TO_NOTIFY, 25))
+	} else {
+		peersToUpdate = getRandomNodes(false, config.GetInt(config.MAX_VIVALDI_NEAR_NODES, 16)) //risposta al todo
+	}
 	for _, registeredNode := range peersToUpdate {
 		newInfo, rtt := statusInfoRequest(&registeredNode) //recupero RTT e coordinate in status info
 
@@ -1097,6 +1093,10 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 	computeNearestNeighbors(2) //todo change this value, maybe tutti i nodi devono essere considerati (nodi stessa area)
 	fmt.Printf("TEST: X: %f, Y: %f, Z: %f\n", LocalVivaldiClient.GetCoordinate().Vec[0],
 		LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2])
+}
+
+func CalculateDistanceTo(other *vivaldi.Coordinate) time.Duration {
+	return LocalVivaldiClient.DistanceTo(other)
 }
 
 func GetNearestNeighbors() []NodeRegistration {

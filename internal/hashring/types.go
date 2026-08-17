@@ -3,12 +3,19 @@ package hashring
 import (
 	"log"
 	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/serverledge-faas/serverledge/internal/function"
 )
 
 var AllMemoryAvailable = int64(10_000_000) // A high value to symbolize all memory is free
+
+type HashRingTarget struct {
+	NodeKey  string
+	HopNumb  int
+	Distance time.Duration
+}
 
 // MemoryChecker is the function that checks if the node selected has enough memory to execute the function.
 // it is an interface, and it's put in HashRing to make unit-tests possible by mocking it

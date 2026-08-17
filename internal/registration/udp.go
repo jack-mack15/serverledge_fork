@@ -321,7 +321,7 @@ func statusInfoRequest(peer *NodeRegistration) (info *StatusInformation, duratio
 		return nil, 0
 	}
 	//modifica per failure detection
-	timeout := (config.MAX_AREA_DISTANCE * 3) * time.Millisecond
+	timeout := time.Duration(config.GetInt(config.MAX_AREA_DISTANCE, 200)*3) * time.Millisecond
 	err = udpConn.SetReadDeadline(time.Now().Add(timeout))
 	if err != nil {
 		log.Println("Impossibile impostare la deadline:", err)

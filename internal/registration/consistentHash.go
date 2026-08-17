@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -12,8 +13,6 @@ import (
 	"github.com/serverledge-faas/serverledge/internal/function"
 	"github.com/serverledge-faas/serverledge/internal/hashring"
 )
-
-var MAX = 5 //cambiare questo
 
 type CompleteHashRing struct {
 	x86Mu sync.RWMutex
@@ -32,6 +31,7 @@ func SetUpRing(nodes map[string]NodeRegistration) {
 	log.Printf("Running Consistent Hashing with %d replicas per node in the hash rings\n", REPLICAS)
 	localHashRing.armRing = hashring.NewHashRing(REPLICAS)
 	localHashRing.x86Ring = hashring.NewHashRing(REPLICAS)
+	hashring.InitOfflineNodes()
 	if len(nodes) == 0 {
 		return
 	}
@@ -94,9 +94,12 @@ func InsertNodeHash(node NodeRegistration) {
 	ring.Add(target)
 }
 
-// GetTargetFromHashRing ritorna il nodo che sul ring gestisce la funzione specificata.
+// GetTargetsFromHashRing ritorna il nodo che sul ring gestisce la funzione specificata.
 // sta attento anche all'utilizzo delle risorse
-func GetTargetFromHashRing(f *function.Function) *NodeRegistration {
+func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, time.Duration, int) {
+	var maxHop int
+	var maxDistance time.Duration
+
 	//scorro su ogni architettura supportata dalla funzione
 	for _, arch := range f.SupportedArchs {
 		ring, mu := getRingByArch(arch)
@@ -104,13 +107,31 @@ func GetTargetFromHashRing(f *function.Function) *NodeRegistration {
 			continue
 		}
 		mu.RLock()
-		targets := ring.GetMultiple(f, 5)
+		targets := ring.GetMultiple(f, config.GetInt(config.HASH_RING_TARGETS, 5))
 		mu.RUnlock()
-		if len(targets) > 0 {
-			return GetPeerFromKey(targets[0].Name)
+
+		//riempo il campo distance delle strutture HashRingTarget
+		//calcolo anche la distanza massima e il numero di hop massimi
+
+		for _, elem := range targets {
+			temp := GetStatusInfoFromKey(elem.NodeKey)
+			if temp != nil {
+				elem.Distance = CalculateDistanceTo(&temp.Coordinates)
+			} else {
+				//se non ottengo info di status la distanza la imposto manualmente
+				elem.Distance = 1000
+			}
+			//calcolo valori massimi di hop e distanza
+			if elem.HopNumb > maxHop {
+				maxHop = elem.HopNumb
+			}
+			if elem.Distance > maxDistance {
+				maxDistance = elem.Distance
+			}
 		}
+		return targets, maxDistance, maxHop
 	}
-	return nil
+	return nil, maxDistance, maxHop
 }
 
 func getRingByArch(arch string) (*hashring.HashRing, *sync.RWMutex) {

@@ -5,10 +5,15 @@ import (
 	"hash/fnv"
 	"log"
 	"sort"
+	"sync"
 
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/serverledge-faas/serverledge/internal/function"
 )
+
+// questa mappa serve per indicare i nodi che attulmente sembrano essere offline
+var offlineNodes map[string]struct{}
+var offlineMutex sync.RWMutex
 
 type HashRing struct {
 	replicas int
@@ -91,7 +96,7 @@ func (r *HashRing) Get(fun *function.Function) *middleware.ProxyTarget {
 }
 
 // variante di Get che ritorna i primi max elementi successivi (e disponibili) data una funzione
-func (r *HashRing) GetMultiple(fun *function.Function, max int) []*middleware.ProxyTarget {
+func (r *HashRing) GetMultiple(fun *function.Function, max int) []HashRingTarget {
 	if len(r.ring) == 0 {
 		return nil
 	}
@@ -110,17 +115,27 @@ func (r *HashRing) GetMultiple(fun *function.Function, max int) []*middleware.Pr
 	//per le repliche di nodi già visti
 	seen := make(map[string]struct{})
 
-	targets := make([]*middleware.ProxyTarget, 0, max)
+	var targets []HashRingTarget
+
+	hopCount := 0
 
 	for {
 		candidate := r.targets[r.ring[idx]]
 		_, alreadySeen := seen[candidate.Name]
 		if !alreadySeen {
+			//incremento hop count poichè incontro un nuovo nodo
+			hopCount++
+
 			seen[candidate.Name] = struct{}{}
 
 			//test se ha sufficiente memoria
-			if r.memChecker.HasEnoughMemory(candidate, fun) {
-				targets = append(targets, candidate)
+			if r.memChecker.HasEnoughMemory(candidate, fun) && !checkOfflineNode(candidate.Name) {
+				temp := HashRingTarget{
+					NodeKey:  candidate.Name,
+					HopNumb:  hopCount,
+					Distance: 0,
+				}
+				targets = append(targets, temp)
 
 				//controllo se ho preso i primi max nodi
 				if len(targets) == max {
@@ -139,6 +154,31 @@ func (r *HashRing) GetMultiple(fun *function.Function, max int) []*middleware.Pr
 	}
 
 	return targets
+}
+
+func InitOfflineNodes() {
+	offlineNodes = make(map[string]struct{})
+}
+
+func AddOfflineSuspect(nodeKey string) {
+	offlineMutex.Lock()
+	defer offlineMutex.Unlock()
+	offlineNodes[nodeKey] = struct{}{}
+}
+
+func RemoveOfflineSuspect(nodeKey string) {
+	offlineMutex.Lock()
+	defer offlineMutex.Unlock()
+	delete(offlineNodes, nodeKey)
+}
+
+func checkOfflineNode(nodeKey string) bool {
+	offlineMutex.RLock()
+	defer offlineMutex.RUnlock()
+	if _, ok := offlineNodes[nodeKey]; ok {
+		return true
+	}
+	return false
 }
 
 func (r *HashRing) RemoveByName(name string) bool {
@@ -160,6 +200,11 @@ func (r *HashRing) RemoveByName(name string) bool {
 		r.ring = newRing
 		sort.Slice(r.ring, func(i, j int) bool { return r.ring[i] < r.ring[j] })
 		r.removeFromTargetList(name)
+		if checkOfflineNode(name) {
+			offlineMutex.Lock()
+			delete(offlineNodes, name)
+			offlineMutex.Unlock()
+		}
 
 	}
 

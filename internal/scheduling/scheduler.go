@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/serverledge-faas/serverledge/internal/config"
 	"github.com/serverledge-faas/serverledge/internal/registration"
 
 	"github.com/serverledge-faas/serverledge/internal/container"
@@ -180,18 +181,36 @@ func handleCloudOffload(r *scheduledRequest) {
 }
 
 func handleHashRingOffload(r *scheduledRequest) {
-	//cerco nodo target sull'hash ring
-	offloadingTarget := registration.GetTargetFromHashRing(r.Fun)
-
-	if offloadingTarget == nil {
+	//cerco numero di nodi target dall'hash ring. il numero di questi nodi è pari a hash.ring.targets o 5
+	hashRingTargets, maxDistance, maxHop := registration.GetTargetsFromHashRing(r.Fun)
+	//se distanze ancora non sono impostate
+	if maxDistance == 0 {
+		maxDistance = 1
+	}
+	var bestNode registration.NodeRegistration
+	if hashRingTargets == nil {
 		//se hash ring non trova, opto per il cloud. se non si riesce con il cloud, effettuo il drop
 		log.Println("Consistent Hash: offloading in cloud")
 		handleCloudOffload(r)
 		return
 	}
 
+	//calcolo del punteggio
+	weight := config.GetFloat(config.CONSISTENT_HASH_WEIGHT, 0.5)
+	var best int
+	bestPoints := 1.0
+	for index, elem := range hashRingTargets {
+		currPoints := (1.0 - weight) * (float64)(elem.Distance.Milliseconds()/maxDistance.Milliseconds())
+		currPoints += weight * (float64)(elem.HopNumb/maxHop)
+		if currPoints < bestPoints {
+			best = index
+		}
+	}
+
+	bestNode = *registration.GetPeerFromKey(hashRingTargets[best].NodeKey)
+
 	//il nodo corrente deve gestire l'esecuzione
-	if offloadingTarget.Key == node.LocalNode.Key {
+	if bestNode.Key == node.LocalNode.Key {
 		containerID, warm, err := node.AcquireContainer(r.Fun, false)
 		if err == nil {
 			log.Println("Consistent Hash: execution locally")
@@ -202,5 +221,5 @@ func handleHashRingOffload(r *scheduledRequest) {
 		return
 	}
 	log.Println("Consistent Hash: offloading in edge")
-	handleOffload(r, offloadingTarget.APIUrl())
+	handleOffload(r, bestNode.APIUrl())
 }

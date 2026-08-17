@@ -24,6 +24,6 @@ func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 		fmt.Println("OFFLOADING: name " + r.Fun.Name + " runtime " + r.Fun.SupportedArchs[0])
 		handleHashRingOffload(r) // This will also check for architecture compatibility
 	} else {
-		dropRequest(r)
+		tryLocalExecution(r)
 	}
 }
