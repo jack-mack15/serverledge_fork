@@ -175,13 +175,13 @@ func anchorInfoRequest(anchor *NodeRegistration) (coords *vivaldi.Coordinate, rt
 	remoteAddr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
 		log.Printf("Unreachable server %s\n", address)
-		return nil, 0, 0
+		return nil, -1, -1
 	}
 
 	udpConn, err := net.DialUDP("udp", nil, remoteAddr)
 	if err != nil {
 		log.Println(err)
-		return nil, 0, 0
+		return nil, -1, -1
 	}
 	defer func(udpConn *net.UDPConn) {
 		err := udpConn.Close()
@@ -194,13 +194,13 @@ func anchorInfoRequest(anchor *NodeRegistration) (coords *vivaldi.Coordinate, rt
 	message, err := getAnchorRequestMessage()
 	if err != nil {
 		log.Println(err)
-		return nil, 0, 0
+		return nil, -1, -1
 	}
 	sendingTime := time.Now()
 	_, err = udpConn.Write(message)
 	if err != nil {
 		log.Println(err)
-		return nil, 0, 0
+		return nil, -1, -1
 	}
 
 	// receive message from server
@@ -208,7 +208,7 @@ func anchorInfoRequest(anchor *NodeRegistration) (coords *vivaldi.Coordinate, rt
 	_, _, err = udpConn.ReadFromUDP(buffer)
 	if err != nil {
 		log.Println(err)
-		return nil, 0, 0
+		return nil, -1, -1
 	}
 
 	rtt := time.Now().Sub(sendingTime)
@@ -219,7 +219,7 @@ func anchorInfoRequest(anchor *NodeRegistration) (coords *vivaldi.Coordinate, rt
 	err = json.Unmarshal(buffer, &response)
 	if err != nil {
 		log.Printf("Errore durante l'unmarshal del JSON dell'Anchor: %v\n", err)
-		return nil, 0, 0
+		return nil, -1, -1
 	}
 	log.Println("Requesting status information COMPLETED")
 	return &response.Coordinates, rtt, response.Radius
