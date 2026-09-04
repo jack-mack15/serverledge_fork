@@ -819,9 +819,15 @@ func calculateRadius() {
 			maxDistance = temp
 		}
 	}
-	log.Println("Current Radius:", maxDistance)
+	log.Println("-----------------------TESTTTTTTTTT: Current Radius:", maxDistance)
 	radius = maxDistance
 	neighborMu.RUnlock()
+
+	//TODO remove this portion
+	for _, n := range neighborInfo {
+		temp := LocalVivaldiClient.DistanceTo(&n.Coordinates).Milliseconds()
+		log.Println("-------------------------Distance to node: ", temp)
+	}
 }
 
 // calculateCentroid calcola il centro della zona di nodi come media aritmetica delle componenti dei nodi.
@@ -1091,8 +1097,8 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 
 	// Updates neighborInfo with the N closest nodes from serverMap
 	computeNearestNeighbors(2) //todo change this value, maybe tutti i nodi devono essere considerati (nodi stessa area)
-	fmt.Printf("TEST: X: %f, Y: %f, Z: %f\n", LocalVivaldiClient.GetCoordinate().Vec[0],
-		LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2])
+	//fmt.Printf("TEST: X: %f, Y: %f, Z: %f\n", LocalVivaldiClient.GetCoordinate().Vec[0],
+	//	LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2])
 }
 
 func CalculateDistanceTo(other *vivaldi.Coordinate) time.Duration {
