@@ -200,8 +200,8 @@ func handleHashRingOffload(r *scheduledRequest) {
 	var best int
 	bestPoints := 1.0
 	for index, elem := range hashRingTargets {
-		currPoints := (1.0 - weight) * (float64)(elem.Distance.Milliseconds()/maxDistance.Milliseconds())
-		currPoints += weight * (float64)(elem.HopNumb/maxHop)
+		currPoints := (1.0 - weight) * (float64(elem.Distance.Milliseconds()) / float64(maxDistance.Milliseconds()))
+		currPoints += weight * float64(elem.HopNumb) / float64(maxHop)
 		if currPoints < bestPoints {
 			best = index
 		}
