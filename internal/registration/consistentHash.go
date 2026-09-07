@@ -39,9 +39,10 @@ func SetUpRing(nodes map[string]NodeRegistration) {
 		parsedUrl, err := url.Parse(n.APIUrl())
 		if err != nil {
 			log.Printf("SetUpRing in Consistent Hash: Error parsing URL: %v\n", err)
-			return
+			continue
 		}
 		archMap := echo.Map{"arch": n.Arch}
+		log.Println("SetUpRing architecture added is: " + n.Arch)
 		target := &middleware.ProxyTarget{Name: n.Key, URL: parsedUrl, Meta: archMap}
 
 		//todo verificare le stringhe corrette

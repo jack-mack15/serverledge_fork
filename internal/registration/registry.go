@@ -1097,8 +1097,8 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 
 	// Updates neighborInfo with the N closest nodes from serverMap
 	computeNearestNeighbors(2) //todo change this value, maybe tutti i nodi devono essere considerati (nodi stessa area)
-	//fmt.Printf("TEST: X: %f, Y: %f, Z: %f\n", LocalVivaldiClient.GetCoordinate().Vec[0],
-	//	LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2])
+	fmt.Printf("TEST: X: %f, Y: %f, Z: %f\n", LocalVivaldiClient.GetCoordinate().Vec[0],
+		LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2])
 }
 
 func CalculateDistanceTo(other *vivaldi.Coordinate) time.Duration {

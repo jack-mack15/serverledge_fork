@@ -38,6 +38,7 @@ func NewHashRing(replicas int) *HashRing {
 
 func (r *HashRing) Add(t *middleware.ProxyTarget) {
 	// put replicas in the ring. To do so we'll hash the node's name + an incrementing number
+	log.Println("Hash Ring Adding new replicas for node " + t.Name)
 	for i := 0; i < r.replicas; i++ {
 		key := fmt.Sprintf("%s#%d", t.Name, i)
 		h := hash(key)
