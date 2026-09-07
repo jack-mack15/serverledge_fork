@@ -110,7 +110,7 @@ func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, ti
 		mu.RLock()
 		targets := ring.GetMultiple(f, config.GetInt(config.HASH_RING_TARGETS, 5))
 		mu.RUnlock()
-
+		log.Printf("SONO TORNATO DA GETMULTIPLE CON %d\n", len(targets))
 		//riempo il campo distance delle strutture HashRingTarget
 		//calcolo anche la distanza massima e il numero di hop massimi
 
