@@ -99,6 +99,7 @@ func (r *HashRing) Get(fun *function.Function) *middleware.ProxyTarget {
 // variante di Get che ritorna i primi max elementi successivi (e disponibili) data una funzione
 func (r *HashRing) GetMultiple(fun *function.Function, max int) []HashRingTarget {
 	if len(r.ring) == 0 {
+		log.Println("GetMultiple return 0 targets, empty hash ring")
 		return nil
 	}
 
@@ -123,6 +124,7 @@ func (r *HashRing) GetMultiple(fun *function.Function, max int) []HashRingTarget
 	for {
 		candidate := r.targets[r.ring[idx]]
 		_, alreadySeen := seen[candidate.Name]
+		log.Println("---------------------------forse non entro nell'if")
 		if !alreadySeen {
 			//incremento hop count poichè incontro un nuovo nodo
 			hopCount++
@@ -130,6 +132,7 @@ func (r *HashRing) GetMultiple(fun *function.Function, max int) []HashRingTarget
 			seen[candidate.Name] = struct{}{}
 
 			//test se ha sufficiente memoria
+			log.Println("---------------------------------------- test precedente a hasenoughmemory")
 			if r.memChecker.HasEnoughMemory(candidate, fun) && !checkOfflineNode(candidate.Name) {
 				temp := HashRingTarget{
 					NodeKey:  candidate.Name,
@@ -154,6 +157,7 @@ func (r *HashRing) GetMultiple(fun *function.Function, max int) []HashRingTarget
 		}
 	}
 
+	log.Println("--------------------------------------esco da qua?")
 	return targets
 }
 
