@@ -104,6 +104,7 @@ func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, ti
 	for _, arch := range f.SupportedArchs {
 		ring, mu := getRingByArch(arch)
 		if ring == nil {
+			log.Println("ESCO PERCHÈ NON TROVO ANELLO")
 			continue
 		}
 		mu.RLock()
@@ -131,6 +132,7 @@ func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, ti
 		}
 		return targets, maxDistance, maxHop
 	}
+	log.Println("ESCO PERCHÈ NON TROVO NESSUNA ARCHITETTURA")
 	return nil, maxDistance, maxHop
 }
 
