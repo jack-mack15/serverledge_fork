@@ -181,7 +181,8 @@ func CreateOrUpdateFunction(c echo.Context) error {
 			log.Printf("User indicated unknown runtime: %s\n", f.Runtime)
 			return c.String(http.StatusNotFound, "Invalid runtime.")
 		}
-		f.SupportedArchs = []string{container.X86, container.ARM}
+		//f.SupportedArchs = []string{container.X86, container.ARM}
+		f.SupportedArchs = []string{container.ARM}
 		if f.MaxConcurrency > 1 && !selectedRuntime.ConcurrencySupported {
 			log.Printf("Forcing max concurrency = 1 for runtime %s\n", f.Runtime)
 			f.MaxConcurrency = 1
