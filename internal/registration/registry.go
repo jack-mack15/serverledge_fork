@@ -818,8 +818,8 @@ func runMonitor() {
 }
 
 func monitorArea() {
-	radiusTicker := time.NewTicker(time.Duration(config.GetInt(config.REG_NEARBY_INTERVAL, 20)) * time.Second)
-	centroidTicker := time.NewTicker(time.Duration(config.GetInt(config.REG_NEARBY_INTERVAL, 20)) * time.Second)
+	radiusTicker := time.NewTicker(time.Duration(config.GetInt(config.RADIUS_TIMER, 20)) * time.Second)
+	centroidTicker := time.NewTicker(time.Duration(config.GetInt(config.CENTROID_TIMER, 20)) * time.Second)
 	for {
 		select {
 		case <-radiusTicker.C:
@@ -1103,7 +1103,6 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 
 		//_, err := vivaldiClient.Update("node", &newInfo.Coordinates, rtt)		OLD
 		_, err := vivaldiClient.Update(registeredNode.NodeID.Key, &newInfo.Coordinates, rtt) //NEW
-		//log.Printf("RTT misurato is %v and distance is %v\n", rtt, LocalVivaldiClient.DistanceTo(&newInfo.Coordinates))
 		if err != nil {
 			log.Printf("Error while updating node coordinates: %s\n", err)
 		}
@@ -1111,7 +1110,8 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 	}
 
 	// Updates neighborInfo with the N closest nodes from serverMap
-	computeNearestNeighbors(2) //todo change this value, maybe tutti i nodi devono essere considerati (nodi stessa area)
+	//computeNearestNeighbors(2)		OLD
+	computeNearestNeighbors(config.GetInt(config.MAX_NEAREST_NODES, 2))
 	//fmt.Printf("Coordinates: X: %f, Y: %f, Z: %f\n", LocalVivaldiClient.GetCoordinate().Vec[0],
 	//	LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2])
 }
