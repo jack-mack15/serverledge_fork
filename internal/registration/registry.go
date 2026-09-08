@@ -789,7 +789,7 @@ func monitorFailure() {
 
 // controlla se ci sono nodi spenti e li elimina di conseguenza
 func deadCollector() {
-	fmt.Println("Dead Collector in action")
+	//fmt.Println("Dead Collector in action")
 	failureMu.Lock()
 
 	for i := len(neighborFailureInfos) - 1; i >= 0; i-- {

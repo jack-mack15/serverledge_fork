@@ -170,7 +170,7 @@ func anchorInfoRequest(anchor *NodeRegistration) (coords *vivaldi.Coordinate, rt
 	hostname := anchor.IPAddress
 	port := anchor.UDPPort
 	address := fmt.Sprintf("%s:%d", hostname, port)
-	log.Printf("Requesting anchor information for %s\n", address)
+	//log.Printf("Requesting anchor information for %s\n", address)
 
 	remoteAddr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
@@ -221,7 +221,7 @@ func anchorInfoRequest(anchor *NodeRegistration) (coords *vivaldi.Coordinate, rt
 		log.Printf("Errore durante l'unmarshal del JSON dell'Anchor: %v\n", err)
 		return nil, -1, -1
 	}
-	log.Println("Requesting status information COMPLETED")
+	//log.Println("Requesting status information COMPLETED")
 	return &response.Coordinates, rtt, response.Radius
 }
 
