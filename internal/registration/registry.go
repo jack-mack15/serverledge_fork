@@ -761,7 +761,7 @@ func StartMonitoring() error {
 
 // useful for test about vivaldi convergence
 func dumpCoordinates() {
-	checkTimer := time.NewTicker(time.Duration(1) * time.Second)
+	checkTimer := time.NewTicker(time.Duration(10) * time.Second)
 	for {
 		select {
 		case <-checkTimer.C:
@@ -775,6 +775,9 @@ func dumper() {
 		LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2],
 		LocalVivaldiClient.GetCoordinate().Adjustment, LocalVivaldiClient.GetCoordinate().Height)
 	counterForVivaldi++
+	for key := range neighbors {
+		fmt.Printf("Neighbor: %s distance is: %d\n", key, LocalVivaldiClient.DistanceTo(&GetStatusInfoFromKey(key).Coordinates).Milliseconds())
+	}
 }
 
 func monitorFailure() {
@@ -1103,6 +1106,7 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 
 		//_, err := vivaldiClient.Update("node", &newInfo.Coordinates, rtt)		OLD
 		_, err := vivaldiClient.Update(registeredNode.NodeID.Key, &newInfo.Coordinates, rtt) //NEW
+		fmt.Printf("RTT misurato is %d and distance is %d\n", rtt.Milliseconds(), LocalVivaldiClient.DistanceTo(&newInfo.Coordinates).Milliseconds())
 		if err != nil {
 			log.Printf("Error while updating node coordinates: %s\n", err)
 		}
