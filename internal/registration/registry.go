@@ -59,6 +59,8 @@ var SelfRegistration *NodeRegistration
 var etcdClient *clientv3.Client = nil
 var etcdLease clientv3.LeaseID
 
+var counterForVivaldi = 0
+
 func (r *NodeRegistration) toEtcdKey() (key string) {
 	if r.IsLoadBalancer {
 		return fmt.Sprintf("%s/%s/%s/%s/%s", registryBaseDirectory, r.Area, registryLoadBalancerDirectory, r.NodeID.Arch, r.Key)
@@ -744,6 +746,7 @@ func StartMonitoring() error {
 	go UDPStatusServer()
 	go runMonitor()
 	go monitorFailure()
+	go dumpCoordinates()
 
 	if amAnchor {
 		log.Printf("Starting Pharos Anchor Monitoring\n")
@@ -754,6 +757,24 @@ func StartMonitoring() error {
 		go monitorArea()
 	}
 	return nil
+}
+
+// useful for test about vivaldi convergence
+func dumpCoordinates() {
+	checkTimer := time.NewTicker(time.Duration(1) * time.Second)
+	for {
+		select {
+		case <-checkTimer.C:
+			dumper()
+		}
+	}
+}
+
+func dumper() {
+	log.Printf("count:%d; X: %f; Y: %f; Z: %f; Adj: %f; Height: %f\n", counterForVivaldi, LocalVivaldiClient.GetCoordinate().Vec[0],
+		LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2],
+		LocalVivaldiClient.GetCoordinate().Adjustment, LocalVivaldiClient.GetCoordinate().Height)
+	counterForVivaldi++
 }
 
 func monitorFailure() {
@@ -819,15 +840,8 @@ func calculateRadius() {
 			maxDistance = temp
 		}
 	}
-	log.Println("-----------------------TESTTTTTTTTT: Current Radius:", maxDistance)
 	radius = maxDistance
 	neighborMu.RUnlock()
-
-	//TODO remove this portion
-	for _, n := range neighborInfo {
-		temp := LocalVivaldiClient.DistanceTo(&n.Coordinates).Milliseconds()
-		log.Println("-------------------------Distance to node: ", temp)
-	}
 }
 
 // calculateCentroid calcola il centro della zona di nodi come media aritmetica delle componenti dei nodi.
@@ -1097,8 +1111,8 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 
 	// Updates neighborInfo with the N closest nodes from serverMap
 	computeNearestNeighbors(2) //todo change this value, maybe tutti i nodi devono essere considerati (nodi stessa area)
-	fmt.Printf("TEST: X: %f, Y: %f, Z: %f\n", LocalVivaldiClient.GetCoordinate().Vec[0],
-		LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2])
+	//fmt.Printf("Coordinates: X: %f, Y: %f, Z: %f\n", LocalVivaldiClient.GetCoordinate().Vec[0],
+	//	LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2])
 }
 
 func CalculateDistanceTo(other *vivaldi.Coordinate) time.Duration {

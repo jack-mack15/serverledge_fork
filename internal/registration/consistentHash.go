@@ -105,13 +105,11 @@ func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, ti
 	for _, arch := range f.SupportedArchs {
 		ring, mu := getRingByArch(arch)
 		if ring == nil {
-			log.Println("ESCO PERCHÈ NON TROVO ANELLO")
 			continue
 		}
 		mu.RLock()
 		targets := ring.GetMultiple(f, config.GetInt(config.HASH_RING_TARGETS, 5))
 		mu.RUnlock()
-		log.Printf("SONO TORNATO DA GETMULTIPLE CON %d\n", len(targets))
 		//riempo il campo distance delle strutture HashRingTarget
 		//calcolo anche la distanza massima e il numero di hop massimi
 
@@ -133,7 +131,6 @@ func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, ti
 		}
 		return targets, maxDistance, maxHop
 	}
-	log.Println("ESCO PERCHÈ NON TROVO NESSUNA ARCHITETTURA")
 	return nil, maxDistance, maxHop
 }
 
