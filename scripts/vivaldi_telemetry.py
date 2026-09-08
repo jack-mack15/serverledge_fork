@@ -1,16 +1,16 @@
-import subprocess
 import re
 import csv
 import time
 import socket
+import os
 from datetime import datetime
 
-# Configurazione dinamica del nome file in base alla VM
+# Configurazione dinamica
 HOSTNAME = socket.gethostname()
 CSV_FILE = f"log_{HOSTNAME}.csv"
-INTERVAL_SECONDS = 1  # Frequenza di polling dei log
+SERVERLEDGE_LOG_FILE = "/home/ubuntu/serverledge-tesi/serverledge.log"  # Percorso assoluto
 
-# Regex aggiornata per catturare count, X, Y, Z, Adj e Height
+# La regex va bene: re.search ignorerà in automatico la data iniziale (2026/09/08 08:58:04)
 LOG_PATTERN = re.compile(
     r"count:(?P<count>\d+);\s*"
     r"X:\s*(?P<x>-?[\d\.]+);\s*"
@@ -20,67 +20,50 @@ LOG_PATTERN = re.compile(
     r"Height:\s*(?P<height>-?[\d\.]+)"
 )
 
-def get_cluster_nodes():
-    """Recupera l'elenco dei container worker attivi tramite Docker."""
-    try:
-        output = subprocess.check_output(
-            ["docker", "ps", "--filter", "name=worker", "--format", "{{.Names}}"]
-        )
-        return output.decode("utf-8").splitlines()
-    except Exception as e:
-        print(f"Errore nel recupero dei nodi Docker: {e}")
-        return []
-
 def main():
-    print(f"Avvio telemetria Vivaldi. Salvataggio su {CSV_FILE}...")
+    print(f"Avvio telemetria. Lettura da '{SERVERLEDGE_LOG_FILE}', salvataggio su '{CSV_FILE}'...")
     
-    # Inizializza il file CSV con l'intestazione completa
-    with open(CSV_FILE, mode="w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["timestamp", "node_id", "counter", "x", "y", "z", "adjustment", "height"])
+    if not os.path.exists(CSV_FILE):
+        with open(CSV_FILE, mode="w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["timestamp", "node_id", "counter", "x", "y", "z", "adjustment", "height"])
 
-    seen_entries = set() # Per evitare di duplicare righe già lette
+    seen_entries = set()
 
     try:
-        while True:
-            nodes = get_cluster_nodes()
-            current_time = datetime.now().isoformat()
-
-            for node in nodes:
-                try:
-                    # Legge gli ultimi log del container
-                    logs = subprocess.check_output(
-                        ["docker", "logs", "--tail", "5", node],
-                        stderr=subprocess.STDOUT
-                    ).decode("utf-8")
-
-                    for line in logs.splitlines():
-                        match = LOG_PATTERN.search(line)
-                        if match:
-                            data = match.groupdict()
-                            # Chiave univoca per evitare duplicati dallo stream dei log
-                            entry_key = (node, data["count"])
+        with open(SERVERLEDGE_LOG_FILE, "r") as log_file:
+            while True:
+                line = log_file.readline()
+                
+                # Se non ci sono nuove righe, aspetta mezzo secondo
+                if not line:
+                    time.sleep(0.5)
+                    continue
+                
+                match = LOG_PATTERN.search(line)
+                if match:
+                    data = match.groupdict()
+                    entry_key = data["count"]
+                    
+                    if entry_key not in seen_entries:
+                        seen_entries.add(entry_key)
+                        current_time = datetime.now().isoformat()
+                        
+                        with open(CSV_FILE, mode="a", newline="") as f:
+                            writer = csv.writer(f)
+                            writer.writerow([
+                                current_time,
+                                HOSTNAME,
+                                data["count"],
+                                data["x"],
+                                data["y"],
+                                data["z"],
+                                data["adj"],
+                                data["height"]
+                            ])
                             
-                            if entry_key not in seen_entries:
-                                seen_entries.add(entry_key)
-                                with open(CSV_FILE, mode="a", newline="") as f:
-                                    writer = csv.writer(f)
-                                    writer.writerow([
-                                        current_time,
-                                        node,
-                                        data["count"],
-                                        data["x"],
-                                        data["y"],
-                                        data["z"],
-                                        data["adj"],
-                                        data["height"]
-                                    ])
-                except Exception as e:
-                    # Ignora errori temporanei sui singoli container spenti/riavviati
-                    pass
-
-            time.sleep(INTERVAL_SECONDS)
-            
+    except FileNotFoundError:
+        print(f"Errore: Il file '{SERVERLEDGE_LOG_FILE}' non esiste. Avvia prima Serverledge reindirizzando l'output su file.")
     except KeyboardInterrupt:
         print(f"\nTelemetria interrotta dall'utente. Dati salvati in {CSV_FILE}.")
 
