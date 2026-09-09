@@ -223,6 +223,17 @@ func (r *HashRing) removeFromTargetList(targetName string) {
 	r.TargetList = newList
 }
 
+//funzione che ritorna il primo elemento dell'anello
+func (r *HashRing) GetFirstNode() string {
+	if len(r.ring) == 0 {
+		return ""
+	}
+
+	firstHash := r.ring[0]
+
+	return r.targets[firstHash].Name
+}
+
 // Size returns the number of UNIQUE nodes in the ring, not the numbers of total nodes (which is = nUniqueNodes * Replicas)
 func (r *HashRing) Size() int {
 

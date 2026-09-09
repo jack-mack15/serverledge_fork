@@ -1,7 +1,6 @@
 package registration
 
 import (
-	"fmt"
 	"log"
 	"net/url"
 	"sync"
@@ -45,15 +44,15 @@ func SetUpRing(nodes map[string]NodeRegistration) {
 		log.Println("SetUpRing architecture added is: " + n.Arch)
 		target := &middleware.ProxyTarget{Name: n.Key, URL: parsedUrl, Meta: archMap}
 
-		//todo verificare le stringhe corrette
 		ring, _ := getRingByArch(n.Arch)
-		ring.Add(target)
-
+		if ring != nil {
+			ring.Add(target)
+		}
 	}
 }
 
-// RemoveNode rimuove un elemento dalla mappa di nodi e dall'hash ring
-func RemoveNode(nodeKey string, arch string) {
+// ConsistentHashRemoveNode rimuove un elemento dalla mappa di nodi e dall'hash ring
+func ConsistentHashRemoveNode(nodeKey string, arch string) {
 
 	//per rendere estensibile
 	ring, mu := getRingByArch(arch)
@@ -71,7 +70,7 @@ func RemoveNode(nodeKey string, arch string) {
 
 // InsertNodeHash aggiunge un nuovo nodo alle strutture dati per il consistent hashing
 func InsertNodeHash(node NodeRegistration) {
-	fmt.Println("Consistent Hash Insert Node: " + node.Key + "  with arch: " + node.Arch)
+	log.Println("Consistent Hash Insert Node: " + node.Key + "  with arch: " + node.Arch)
 	//creazione proxy target
 	parsedUrl, err := url.Parse(node.APIUrl())
 	if err != nil {
@@ -134,6 +133,27 @@ func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, ti
 	return nil, maxDistance, maxHop
 }
 
+// ritorna il primo elemento dello stesso ring in cui era situata la vecchia anchor.
+// se tale ring è vuoto, prende il primo nodo dall'altro ring.
+func GetNewAnchor(arch string) string {
+	var newAnchor string
+	ring, mu := getRingByArch(arch)
+	//recupero il primo nodo dall'anello in cui era la prima anchor
+	if ring != nil {
+		mu.RLock()
+		newAnchor = ring.GetFirstNode()
+		mu.RUnlock()
+	}
+	//se non trovo nulla, significa che il primo anello adesso è vuoto, cerco nel prossimo
+	if newAnchor == "" {
+		ring, mu = getReverseRingByArch(arch)
+		mu.RLock()
+		newAnchor = ring.GetFirstNode()
+		mu.RUnlock()
+	}
+	return newAnchor
+}
+
 func getRingByArch(arch string) (*hashring.HashRing, *sync.RWMutex) {
 	switch arch {
 	case "arm64":
@@ -146,86 +166,14 @@ func getRingByArch(arch string) (*hashring.HashRing, *sync.RWMutex) {
 	}
 }
 
-/*
-// questa funzione cerca di unire il concetto di hash ring con il concetto di distanza
-func GetTargetNodeBest(f *function.Function) *StatusInformation {
-	var bestNodeHash []*StatusInformation
-
-	mutexHash.RLock()
-
-	length := len(hashRing)
-
-	if length == 0 {
-		log.Printf("impossibile instradare '%s': l'anello è vuoto", f.Name)
-		return nil
+func getReverseRingByArch(arch string) (*hashring.HashRing, *sync.RWMutex) {
+	switch arch {
+	case "amd64":
+		return localHashRing.armRing, &localHashRing.armMu
+	case "arm64":
+		return localHashRing.x86Ring, &localHashRing.x86Mu
+	default:
+		log.Printf("Consistent Hash: Architettura non supportata: %s\n", arch)
+		return nil, nil
 	}
-
-	//hash del nome della funzione
-	funcHash := hash(f.Name)
-
-	//scorro anello e trovo il primo nodo successivo a funcHash
-	idx := sort.Search(length, func(i int) bool {
-		return hashRing[i] >= funcHash
-	})
-
-	//significa che il primo nodo successivo è il primo
-	if idx == length {
-		idx = 0
-	}
-	currMax := 0
-	//idx sarà il nodo di partenza, da questo scorriamo il ring fino a trovare un nodo che può eseguire la funzione
-	for i := 0; i < length; i++ {
-		tempHash := hashRing[idx]
-		tempNode := hashNodes[tempHash]
-		if testResources(f, GetPeerFromKey(tempNode.Key), GetStatusInfoFromKey(tempNode.Key)) {
-			bestNodeHash = append(bestNodeHash, GetStatusInfoFromKey(tempNode.Key))
-			currMax++
-		}
-		idx = (idx + 1) % length
-		i++
-		if currMax == MAX {
-			break
-		}
-	}
-
-	mutexHash.RUnlock()
-
-	//controllo se non ci sono nodi
-	if len(bestNodeHash) == 0 {
-		log.Println("Hash Ring Error: no node can process the function")
-		return nil
-	}
-
-	//a questo punto dovrei aver ottenuto i migliori nodi (quelli disponibili e vicini all'hash della funizone)
-	var bestScore = math.MaxInt
-	var bestNode *StatusInformation
-	for i := 0; i < len(bestNodeHash); i++ {
-		tempDist := LocalVivaldiClient.DistanceTo(&bestNodeHash[i].Coordinates).Milliseconds()
-		tempScore := (int)(tempDist*30) + i*70
-		if tempScore <= bestScore {
-			bestScore = tempScore
-			bestNode = bestNodeHash[i]
-		}
-	}
-
-	return bestNode
 }
-
-// funzione che verifica se il nodo scelto può gestire tale funzione
-func testResources(f *function.Function, node *NodeRegistration, info *StatusInformation) bool {
-	if f.SupportsArch(node.Arch) && info.AvailableMemory > f.MemoryMB {
-		return true
-	}
-	return false
-}
-
-// Hash function uses the FNV-1a function. It has good distribution and is fast to compute. It's not cryptographically safe,
-// but should be good enough for our purposes (consistent-hashing).
-func hash(s string) uint32 {
-	h := fnv.New32a()
-	_, err := h.Write([]byte(s))
-	if err != nil {
-		log.Printf("error hashing %s: %v", s, err)
-	}
-	return h.Sum32()
-}*/

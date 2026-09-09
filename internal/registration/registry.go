@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand"
 	"net"
+	"os"
 	"path"
 	"runtime"
 	"sort"
@@ -59,6 +60,7 @@ var SelfRegistration *NodeRegistration
 var etcdClient *clientv3.Client = nil
 var etcdLease clientv3.LeaseID
 
+var myAnchor string
 var counterForVivaldi = 0
 
 func (r *NodeRegistration) toEtcdKey() (key string) {
@@ -90,7 +92,7 @@ func JoinConsistentHashArea() error {
 		return UnavailableClientErr
 	}
 
-	area, err := findAreaPharos()
+	area, anchorId, err := findAreaPharos()
 	if err != nil {
 		log.Fatal(err) //TODO come gestire l'errore?
 	}
@@ -100,7 +102,8 @@ func JoinConsistentHashArea() error {
 		//non ho trovato area, quindi la creo e genero id randomico hashato
 		tempNode := setUpNodeId("")
 		node.LocalNode = tempNode
-
+		//salvo la mia anchor, che sono io
+		myAnchor = tempNode.Key
 		err = createNewArea()
 		if err != nil {
 			return nil //TODO gestire correttamente questo errore
@@ -110,6 +113,8 @@ func JoinConsistentHashArea() error {
 		//qui ho ottenuto un'area
 		node.LocalNode = setUpNodeId(area)
 		node.LocalNode.Area = area
+		//salvo la mia anchor
+		myAnchor = anchorId
 
 	}
 
@@ -207,47 +212,44 @@ func InsertNewNode(key string, addr string, port int) {
 }
 
 // funzione che rimuove un nodo data una stringa (id nodo)
-func removeNeighborNode(key string) {
+func removeNeighborNode(key string) error {
 	neighborMu.Lock()
 	if _, ok := neighbors[key]; ok {
-		RemoveNode(key, neighbors[key].Arch)
+		tempArch := neighbors[key].Arch
+		ConsistentHashRemoveNode(key, tempArch)
 		delete(neighbors, key)
 		delete(neighborInfo, key)
+
+		//controllo se il nodo rimosso era la mia anchor
+		if key == myAnchor {
+			myAnchor = GetNewAnchor(tempArch)
+
+			//controllo se sono diventato anchor
+			if myAnchor == node.LocalNode.Key && !amAnchor {
+				var err error
+				//mi registro come nuova anchor della mia area
+				err = registerAnchor(node.LocalNode.Area, true)
+				if err != nil {
+					return err
+				}
+
+				//avvio la goroutine di monitoraggio area
+				log.Printf("Starting Pharos Anchor Monitoring\n")
+
+				defaultConfig := vivaldi.DefaultConfig()
+				defaultConfig.Dimensionality = 3
+				anchorVivaldi, err = vivaldi.NewClient(defaultConfig)
+				if err != nil {
+					return err
+				}
+				go monitorArea()
+			}
+		}
 		neighborMu.Unlock()
-		return
+		return nil
 	}
 	neighborMu.Unlock()
 
-	return
-}
-
-// questa funzione trova l'area più vicina e la joina (altrimenti la crea)
-// effettua anche la registrazione
-func JoinAreaPharos() error {
-	var err error
-	etcdClient, err = utils.GetEtcdClient()
-	if err != nil {
-		log.Fatal(UnavailableClientErr)
-		return UnavailableClientErr
-	}
-
-	area, err := findAreaPharos()
-	if err != nil {
-		log.Fatal(err) //TODO come gestire l'errore?
-	}
-
-	//setto id del nodo
-	node.LocalNode = setUpNodeId(area)
-
-	//entro se devo creare una nuova area (area più vicina non è sufficientemente vicina)
-	if area == "" {
-		err = createNewArea()
-		if err != nil {
-			return nil //TODO gestire correttamente questo errore
-		}
-	} else {
-		node.LocalNode.Area = area
-	}
 	return nil
 }
 
@@ -262,13 +264,8 @@ func setUpNodeId(area string) node.NodeID {
 	}
 }
 
-// funzione che crea una nuova area
-func createNewArea() error {
-	area := "Area-" + node.LocalNode.Key
-
-	log.Println("New area registered: " + area)
-	node.LocalNode.Area = area
-
+// funzione che aggiunge una anchor su etcd
+func registerAnchor(area string, hasToRemove bool) error {
 	//aggiunta della nuova anchor, ovvero nodo corrente
 	anchorDir := anchorsEtcdKey()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -286,11 +283,20 @@ func createNewArea() error {
 	udpPort := config.GetInt(config.LISTEN_UDP_PORT, 9876)
 
 	//chiave per etcd
-	anchorKey := path.Join(anchorDir, area, node.LocalNode.Key)
+	areaPrefix := path.Join(anchorDir, area)
+	anchorKey := path.Join(areaPrefix, node.LocalNode.Key)
 
 	//valore associato alla chiave
+	//anchorValue := fmt.Sprintf("%s;%d;%d;%s", defaultAddressStr, apiPort, udpPort, node.LocalNode.Arch)
 	anchorValue := fmt.Sprintf("%s;%d;%d;%s", defaultAddressStr, apiPort, udpPort, node.LocalNode.Arch)
 
+	//se serve rimuovo la chiave se esiste
+	if hasToRemove {
+		_, err = etcdClient.Delete(ctx, areaPrefix, clientv3.WithPrefix())
+		if err != nil {
+			log.Printf("Attenzione: errore durante la rimozione delle vecchie ancore per l'area %s: %v\n", area, err)
+		}
+	}
 	//aggiungo la nuova anchor nella lista di anchor: "AreaName/anchorName/anchorIP;APIPort;UDPPort;arch"
 	_, err = etcdClient.Put(ctx, anchorKey, anchorValue)
 	if err != nil {
@@ -298,10 +304,20 @@ func createNewArea() error {
 	}
 
 	log.Printf("Salvataggio su etcd -> Chiave: %s | Valore: %s\n", anchorKey, anchorValue)
-
 	//poichè io creo la nuova area, io sono la nuova anchor
 	amAnchor = true
+
 	return nil
+}
+
+// funzione che crea una nuova area
+func createNewArea() error {
+	area := "Area-" + node.LocalNode.Key
+
+	log.Println("New area registered: " + area)
+	node.LocalNode.Area = area
+
+	return registerAnchor(area, false)
 }
 
 // funzione che ritorna tutte le anchor registrate in Etcd
@@ -342,45 +358,34 @@ func getPharosAnchors() (map[string]NodeRegistration, error) {
 	return anchors, nil
 }
 
-// questa funzione ritorna l'area più vicina e relativo rtt
-func findAreaPharos() (string, error) {
+// questa funzione ritorna l'area più vicina, relativo rtt e chiave dell'anchor
+func findAreaPharos() (string, string, error) {
 
 	anchors, err := getPharosAnchors()
 	if err != nil {
-		fmt.Println("No anchors found")
-		return "", err
+		log.Println("No anchors found")
+		return "", "", err
 	}
 
 	minAreaName := ""
 	minRtt := time.Duration(math.MaxInt64)
+	minAreaAnchor := ""
 
 	for _, anchor := range anchors {
 		_, rtt, currRad := anchorInfoRequest(&anchor)
 
-		if rtt.Milliseconds() == 0 {
+		if (rtt.Milliseconds() == 0) ||
+			(currRad == 0 && rtt.Milliseconds() <
+				(int64)(time.Duration(config.GetInt(config.MAX_AREA_DISTANCE, 200))*time.Millisecond)) ||
+			(rtt < minRtt) {
 			minRtt = rtt
 			minAreaName = anchor.Area
+			minAreaAnchor = anchor.Key
 			continue
-		}
-		//fmt.Println("Correctly contacted anchor " + key + " with RTT: " + rtt.String())
-
-		if currRad == 0 && rtt.Milliseconds() < (int64)(time.Duration(config.GetInt(config.MAX_AREA_DISTANCE, 200))*time.Millisecond) {
-			minRtt = rtt
-			minAreaName = anchor.Area
-			continue
-		}
-
-		if rtt.Milliseconds() >= 0 && rtt.Milliseconds() > 2*currRad {
-			log.Println("Node too far from max radius") //todo modificare meglio questo
-			continue
-		}
-		if rtt < minRtt {
-			minRtt = rtt
-			minAreaName = anchor.Area
 		}
 	}
 
-	return minAreaName, err
+	return minAreaName, minAreaAnchor, err
 }
 
 // RegisterNode make a registration to the local Area
@@ -797,8 +802,12 @@ func deadCollector() {
 		if (time.Now().UnixMilli()-curr.LastSeen) > 2000 || curr.DeadTimes > 3 {
 			//nodo da rimuovere
 			log.Println("Removed offline node: " + curr.NodeKey)
-			removeNeighborNode(curr.NodeKey)
+			err := removeNeighborNode(curr.NodeKey)
+			if err != nil {
+				os.Exit(-1)
+			}
 			neighborFailureInfos = slices.Delete(neighborFailureInfos, i, i+1)
+
 		}
 	}
 	failureMu.Unlock()
@@ -1071,15 +1080,7 @@ func remoteMonitoring(vivaldiClient *vivaldi.Client) {
 
 // nearbyMonitoring check nearby server's status
 func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
-	//log.Printf("Periodic nearby Monitoring\n")
 
-	/*mutex.RLock()		OLD
-	// TODO: randomly choose a subset of peers for update?
-	peersToUpdate := make([]NodeRegistration, 0)
-	for _, reg := range neighbors {
-		peersToUpdate = append(peersToUpdate, reg)
-	}
-	mutex.RUnlock()*/
 	var peersToUpdate []NodeRegistration
 	//se c'è consistent hash attivo, ottengo i nodi più "vecchi" (per timestamp) e altri nodi in modo randomico.
 	//se invece non vi è consistent hash, ottengo solo i nodi in modo randomico
@@ -1093,7 +1094,7 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 		newInfo, rtt := statusInfoRequest(&registeredNode) //recupero RTT e coordinate in status info
 
 		if newInfo == nil {
-			//log.Printf("Unreachable neighbor: %s\n", registeredNode.NodeID)
+			log.Printf("Unreachable neighbor: %s\n", registeredNode.NodeID)
 			continue
 		}
 		neighborMu.Lock()
