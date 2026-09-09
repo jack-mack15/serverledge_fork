@@ -484,7 +484,7 @@ func parseEtcdRegisteredNode(area string, key string, payload []byte) (NodeRegis
 }
 
 // funzione che restituisce maxRandom nodi remoti in modo randomico
-func GetRandomRemoteNodes(area string, includeSelf bool, limit int64, maxRandom int) (map[string]NodeRegistration, error) {
+func GetRandomRemoteNodes(area string, maxRandom int) (map[string]NodeRegistration, error) {
 	anchors, err := getPharosAnchors()
 	if err != nil {
 		log.Printf("Error parsing anchor %s: %v\n", area, err)
@@ -495,7 +495,8 @@ func GetRandomRemoteNodes(area string, includeSelf bool, limit int64, maxRandom 
 	//creo una slice in cui metto le chiavi e poi le mischio
 	keys := make([]string, 0, len(anchors))
 	for k := range anchors {
-		if !includeSelf && area == SelfRegistration.Area && k == SelfRegistration.Key {
+		//salto se sono io o l'ancora della mia area
+		if k == SelfRegistration.Key || area == SelfRegistration.Area {
 			continue
 		}
 		keys = append(keys, k)
@@ -892,7 +893,7 @@ func calculateCentroid() {
 func globalMonitoring() {
 
 	// gets info from Etcd about all the other areas
-	newRemoteNodes, err := GetRandomRemoteNodes(SelfRegistration.Area, false, 0, 0) //config.MAX_VIVALDI_NEAR_NODES)
+	newRemoteNodes, err := GetRandomRemoteNodes(SelfRegistration.Area, config.GetInt(config.MAX_VIVALDI_NEAR_NODES, 10))
 	if err != nil {
 		log.Println(err)
 		return
