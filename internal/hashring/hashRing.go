@@ -21,7 +21,7 @@ type HashRing struct {
 	targets  map[uint32]*middleware.ProxyTarget // mapping hash(es) <-> node. Each node will have #replicas entries in the ring
 	// function to check if the node selected has enough memory to execute the function
 	TargetList []*middleware.ProxyTarget // list of target. Cached instead of iterating on targets every time.
-	memChecker MemoryChecker             // implemented this way to make the code testable by mocking this struct/function.
+	MemChecker MemoryChecker             // implemented this way to make the code testable by mocking this struct/function.
 
 }
 
@@ -32,7 +32,7 @@ func NewHashRing(replicas int) *HashRing {
 		ring:       make([]uint32, 0),
 		targets:    make(map[uint32]*middleware.ProxyTarget),
 		TargetList: make([]*middleware.ProxyTarget, 0),
-		memChecker: &DefaultMemoryChecker{},
+		MemChecker: &DefaultMemoryChecker{},
 	}
 }
 
@@ -62,7 +62,7 @@ func (r *HashRing) Get(fun *function.Function) *middleware.ProxyTarget {
 	}
 	candidate := r.targets[r.ring[idx]] // here we use the map to get the node corresponding to the hash
 
-	if r.memChecker.HasEnoughMemory(candidate, fun) && fun.SupportsArch(candidate.Meta["arch"].(string)) {
+	if r.MemChecker.HasEnoughMemory(candidate, fun) && fun.SupportsArch(candidate.Meta["arch"].(string)) {
 		return candidate
 	}
 
@@ -84,7 +84,7 @@ func (r *HashRing) Get(fun *function.Function) *middleware.ProxyTarget {
 		candidate = r.targets[r.ring[idx]]     // new candidate: idx is the replica's index. candidate is the corresponding physical node
 		_, alreadySeen := seen[candidate.Name] // I check if it's in the map (meaning I already tried it)
 
-		if !alreadySeen && r.memChecker.HasEnoughMemory(candidate, fun) && fun.SupportsArch(candidate.Meta["arch"].(string)) {
+		if !alreadySeen && r.MemChecker.HasEnoughMemory(candidate, fun) && fun.SupportsArch(candidate.Meta["arch"].(string)) {
 			return candidate
 		} else {
 			seen[candidate.Name] = struct{}{} // it's a map, it doesn't really matter if alreadySeen was true or not, there are no duplicates
@@ -131,7 +131,7 @@ func (r *HashRing) GetMultiple(fun *function.Function, max int) []HashRingTarget
 			seen[candidate.Name] = struct{}{}
 
 			//test se ha sufficiente memoria
-			if r.memChecker.HasEnoughMemory(candidate, fun) && !checkOfflineNode(candidate.Name) {
+			if r.MemChecker.HasEnoughMemory(candidate, fun) && !checkOfflineNode(candidate.Name) {
 				temp := HashRingTarget{
 					NodeKey:  candidate.Name,
 					HopNumb:  hopCount,
@@ -223,7 +223,7 @@ func (r *HashRing) removeFromTargetList(targetName string) {
 	r.TargetList = newList
 }
 
-//funzione che ritorna il primo elemento dell'anello
+// funzione che ritorna il primo elemento dell'anello
 func (r *HashRing) GetFirstNode() string {
 	if len(r.ring) == 0 {
 		return ""

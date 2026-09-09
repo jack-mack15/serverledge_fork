@@ -142,7 +142,7 @@ func TestGetNodeFromRing(t *testing.T) {
 	nodeMap := map[string]struct{}{}
 	nodeMap["arm2"] = struct{}{}
 	mockMemChecker := &MockMemChecker{nodesWithEnoughMemory: nodeMap}
-	b.armRing.memChecker = mockMemChecker
+	b.armRing.MemChecker = mockMemChecker
 
 	fun := &function.Function{
 		Name:           "testGetNodeFromRingFunc",
@@ -192,8 +192,8 @@ func TestGetArchFallback(t *testing.T) {
 	nodeMap := map[string]struct{}{}
 	nodeMap["x86_2"] = struct{}{}
 	mockMemChecker := &MockMemChecker{nodesWithEnoughMemory: nodeMap}
-	b.armRing.memChecker = mockMemChecker
-	b.x86Ring.memChecker = mockMemChecker
+	b.armRing.MemChecker = mockMemChecker
+	b.x86Ring.MemChecker = mockMemChecker
 
 	fun := &function.Function{
 		Name:           "testGetArchFallbackFunc",
@@ -242,8 +242,8 @@ func TestGetArchFallbackNotPossible(t *testing.T) {
 	nodeMap := map[string]struct{}{}
 	nodeMap["x86_1"] = struct{}{} // has enough memory but should still not be used because incompatible architecture
 	mockMemChecker := &MockMemChecker{nodesWithEnoughMemory: nodeMap}
-	b.armRing.memChecker = mockMemChecker
-	b.x86Ring.memChecker = mockMemChecker
+	b.armRing.MemChecker = mockMemChecker
+	b.x86Ring.MemChecker = mockMemChecker
 
 	fun := &function.Function{
 		Name:           "testGetArchFallbackNotPossibleFunc",
