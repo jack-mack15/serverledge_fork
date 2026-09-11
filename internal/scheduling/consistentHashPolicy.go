@@ -15,12 +15,12 @@ func (p *ConsistentHashPolicy) Init() {
 	log.Printf("[INFO] Initializing EdgePolicy. Fallback to local execution set to: %t\n", fallBackLocally)
 }
 
-func (p *ConsistentHashPolicy) OnCompletion(_ *function.Function, _ *function.ExecutionReport) {
-
+func (p *ConsistentHashPolicy) OnCompletion(f *function.Function, report *function.ExecutionReport) {
 }
 
 func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 	if r.CanDoOffloading {
+		//in questo modo il prossimo nodo deve gestirla
 		fmt.Println("OFFLOADING: name " + r.Fun.Name + " runtime " + r.Fun.SupportedArchs[0])
 		handleHashRingOffload(r) // This will also check for architecture compatibility
 	} else {

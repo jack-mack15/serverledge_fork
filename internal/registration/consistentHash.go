@@ -167,6 +167,10 @@ func UpdateResources(node string, memory int64, cpu float64) {
 	hashring.NodeMetrics.Update(node, freeMemMB, 0, time.Now().Unix(), freeCpu)
 }
 
+func RestoreResources(node string, memory int64, cpu float64) {
+
+}
+
 func getRingByArch(arch string) (*hashring.HashRing, *sync.RWMutex) {
 	switch arch {
 	case "arm64":

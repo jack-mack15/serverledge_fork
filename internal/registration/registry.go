@@ -1102,7 +1102,6 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 		//aggiorno le metrics
 		hashring.NodeMetrics.Update(registeredNode.Key, newInfo.AvailableMemory, 0,
 			newInfo.LastUpdateTime, newInfo.TotalCPU-newInfo.UsedCPU)
-		
 		neighborMu.Lock()
 
 		neighborInfo[registeredNode.Key] = newInfo

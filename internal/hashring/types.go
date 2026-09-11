@@ -43,6 +43,7 @@ type NodeMetric struct {
 	LastUpdate    int64
 	TotalCPU      float64
 	FreeCPU       float64
+	//Updated       bool //indica se l'ultima modifica è dovuta ad una esecuzione
 }
 
 type NodeMetricCache struct {

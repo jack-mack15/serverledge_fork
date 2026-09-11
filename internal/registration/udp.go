@@ -288,7 +288,7 @@ func statusInfoRequest(peer *NodeRegistration) (info *StatusInformation, duratio
 	hostname := peer.IPAddress
 	port := peer.UDPPort
 	address := fmt.Sprintf("%s:%d", hostname, port)
-	log.Printf("Requesting status information for %s\n", address)
+	//log.Printf("Requesting status information for %s\n", address)
 
 	remoteAddr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
@@ -351,7 +351,7 @@ func statusInfoRequest(peer *NodeRegistration) (info *StatusInformation, duratio
 		return nil, 0
 	}
 
-	log.Printf("Requesting status information COMPLETED\n")
+	//log.Printf("Requesting status information COMPLETED\n")
 
 	return &result, rtt
 }
