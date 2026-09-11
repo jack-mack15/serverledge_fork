@@ -92,6 +92,13 @@ func InsertNodeHash(node NodeRegistration) {
 	defer mu.Unlock()
 
 	ring.Add(target)
+
+	//aggiunta delle metriche
+	nodeInfo := GetStatusInfoFromKey(node.Key)
+	if nodeInfo != nil {
+		hashring.NodeMetrics.Update(node.Key, nodeInfo.AvailableMemory, nodeInfo.TotalMemory, nodeInfo.LastUpdateTime,
+			nodeInfo.TotalCPU-nodeInfo.UsedCPU)
+	}
 }
 
 // GetTargetsFromHashRing ritorna il nodo che sul ring gestisce la funzione specificata.
@@ -152,6 +159,12 @@ func GetNewAnchor(arch string) string {
 		mu.RUnlock()
 	}
 	return newAnchor
+}
+
+func UpdateResources(node string, memory int64, cpu float64) {
+	freeMemMB := hashring.NodeMetrics.GetFreeMemory(node) - memory
+	freeCpu := hashring.NodeMetrics.GetCpu(node) - cpu
+	hashring.NodeMetrics.Update(node, freeMemMB, 0, time.Now().Unix(), freeCpu)
 }
 
 func getRingByArch(arch string) (*hashring.HashRing, *sync.RWMutex) {

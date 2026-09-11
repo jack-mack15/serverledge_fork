@@ -37,11 +37,6 @@ var NodeMetrics = &NodeMetricCache{
 	metrics: make(map[string]NodeMetric),
 }
 
-// ArchitectureCacheLB This map will cache the architecture chosen previously to try and maximize the use of warm containers of targets
-var ArchitectureCacheLB = &ArchitectureCache{
-	cache: make(map[string]ArchitectureCacheEntry),
-}
-
 type NodeMetric struct {
 	TotalMemoryMB int64
 	FreeMemoryMB  int64
@@ -53,16 +48,6 @@ type NodeMetric struct {
 type NodeMetricCache struct {
 	mu      sync.RWMutex
 	metrics map[string]NodeMetric
-}
-
-type ArchitectureCacheEntry struct {
-	Arch      string
-	Timestamp int64
-}
-
-type ArchitectureCache struct {
-	mu    sync.RWMutex
-	cache map[string]ArchitectureCacheEntry
 }
 
 // Update info about memory of a specific node. If totalMemMB = 0, then we keep the previous value.
@@ -92,12 +77,21 @@ func (c *NodeMetricCache) GetFreeMemory(nodeName string) int64 {
 
 	val, ok := c.metrics[nodeName]
 	if !ok {
-		// This can probably only happen in the first phases of execution of Serverledge; we have the list of neighbors
-		// but we haven't completed yet the first polling round for status information. This means the full system has
-		// already started and there should be enough free memory.
-		// Plus, these are cloud nodes, so the total memory should be sufficient to execute any function.
+
 		return AllMemoryAvailable
 	}
 
 	return val.FreeMemoryMB
+}
+
+func (c *NodeMetricCache) GetCpu(nodeName string) float64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	val, ok := c.metrics[nodeName]
+	if !ok {
+		return 0
+	}
+
+	return val.FreeCPU
 }

@@ -211,6 +211,7 @@ func handleHashRingOffload(r *scheduledRequest) {
 
 	//il nodo corrente deve gestire l'esecuzione
 	if bestNode.Key == node.LocalNode.Key {
+		registration.UpdateResources(bestNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand)
 		containerID, warm, err := node.AcquireContainer(r.Fun, false)
 		if err == nil {
 			log.Println("Consistent Hash: execution locally")

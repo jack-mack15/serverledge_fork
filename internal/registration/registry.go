@@ -1098,6 +1098,11 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 			log.Printf("Unreachable neighbor: %s\n", registeredNode.NodeID)
 			continue
 		}
+
+		//aggiorno le metrics
+		hashring.NodeMetrics.Update(registeredNode.Key, newInfo.AvailableMemory, 0,
+			newInfo.LastUpdateTime, newInfo.TotalCPU-newInfo.UsedCPU)
+		
 		neighborMu.Lock()
 
 		neighborInfo[registeredNode.Key] = newInfo
