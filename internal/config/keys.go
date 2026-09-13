@@ -169,6 +169,7 @@ const MAX_AREA_DISTANCE = "max.area.distance"
 
 // Max number of near nodes that vivaldi computes
 const MAX_VIVALDI_NEAR_NODES = "max.vivaldi.near.nodes"
+const ZONE_RADIUS_CONSTRAINT = "zone.radius.constraint"
 
 // Is consistent hashing activated
 const IS_CONSISTENT_HASH = "is.consistent.hash"

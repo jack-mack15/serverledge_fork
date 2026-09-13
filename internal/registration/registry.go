@@ -376,9 +376,8 @@ func findAreaPharos() (string, string, error) {
 		fmt.Printf("RTT is: %d and currRad is: %d\n", rtt.Milliseconds(), currRad)
 		if ((currRad == 0 && rtt.Milliseconds() <
 			(int64)(time.Duration(config.GetInt(config.MAX_AREA_DISTANCE, 200))*time.Millisecond)) ||
-			rtt.Milliseconds() < currRad) &&
+			rtt.Milliseconds() < currRad*int64(config.GetInt(config.ZONE_RADIUS_CONSTRAINT, 2))) &&
 			(rtt < minRtt) {
-			fmt.Println("ENTRO QUA???")
 			minRtt = rtt
 			minAreaName = anchor.Area
 			minAreaAnchor = anchor.Key
@@ -523,47 +522,88 @@ func GetRandomRemoteNodes(area string, maxRandom int) (map[string]NodeRegistrati
 }
 
 // come GetRandomNodesInArea() ma ritorna maxRandom elementi vicini presi randomicamente
-func getRandomAndOldNodes(max int, oldPercent int) []NodeRegistration {
-	nodes := make([]NodeRegistration, 0)
-
+func getRandomAndOldNodes(max int, oldPercent int) []*FailureInfo {
 	failureMu.Lock()
 	defer failureMu.Unlock()
 
-	//creo una copia da cui eliminare i nodi estratti
-	failureCopy := make([]*FailureInfo, len(neighborFailureInfos))
-	copy(failureCopy, neighborFailureInfos)
-
 	//controllo sulla lunghezza della slice
-	if len(failureCopy) < max {
-		max = len(failureCopy)
+	if len(neighborFailureInfos) < max {
+		max = len(neighborFailureInfos)
 	}
+	//calcolo quanto vecchi e quanti randomici
 	howManyOld := (max * oldPercent) / 100
 	remain := max - howManyOld
 
-	//prendo i nodi da contattare con timestamp più vecchio
-	oldNodes := failureCopy[:howManyOld]
+	//prendo i nodi con timestamp più vecchio e li rimuovo
+	oldNodes := make([]*FailureInfo, howManyOld)
+	copy(oldNodes, neighborFailureInfos[:howManyOld])
 
-	//elimino i nodi appena estratti
-	failureCopy = failureCopy[howManyOld:]
+	//prendo il resto di nodi
+	rest := make([]*FailureInfo, len(neighborFailureInfos)-howManyOld)
+	copy(rest, neighborFailureInfos[howManyOld:])
 
-	//mescolo i restanti nodi da contattare per la scelta randomica
+	//mischio i restanti per prenderli randomici
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	r.Shuffle(len(failureCopy), func(i, j int) {
-		failureCopy[i], failureCopy[j] = failureCopy[j], failureCopy[i]
+	r.Shuffle(len(rest), func(i, j int) {
+		rest[i], rest[j] = rest[j], rest[i]
 	})
 
-	randNodes := failureCopy[:remain]
+	randNodes := rest[:remain]
 
-	//aggiungo i nodi estratti al risultato
+	//preparo il risultato
+	selectedKeys := make(map[string]bool)
 	for _, info := range oldNodes {
-		nodes = append(nodes, *GetPeerFromKey(info.NodeKey))
+		selectedKeys[info.NodeKey] = true
 	}
-
 	for _, info := range randNodes {
-		nodes = append(nodes, *GetPeerFromKey(info.NodeKey))
+		selectedKeys[info.NodeKey] = true
 	}
 
-	return nodes
+	//elimino i nodi selezionati dalla slice originale, mantengo intatto l'ordine per timestamp
+	n := 0
+	for _, info := range neighborFailureInfos {
+		if !selectedKeys[info.NodeKey] {
+			neighborFailureInfos[n] = info
+			n++
+		}
+	}
+	//rimuovo puntatori obsoleti
+	for i := n; i < len(neighborFailureInfos); i++ {
+		neighborFailureInfos[i] = nil
+	}
+	neighborFailureInfos = neighborFailureInfos[:n]
+
+	//unisco i risultati
+	result := make([]*FailureInfo, 0, len(oldNodes)+len(randNodes))
+	result = append(result, oldNodes...)
+	result = append(result, randNodes...)
+
+	return result
+}
+
+func addContactedNode(target *FailureInfo, isOk bool) {
+	if isOk {
+		//ho ricevuto risposta. aggiungo in coda
+		target.NodeAlive()
+		neighborFailureInfos = append(neighborFailureInfos, target)
+	} else {
+		//non ho ricevuto risposta
+		target.NodeDead()
+
+		//individuo indice dove reinserirlo
+		index := sort.Search(len(neighborFailureInfos), func(i int) bool {
+			return neighborFailureInfos[i].LastSeen >= target.LastSeen
+		})
+
+		//espando la slice
+		neighborFailureInfos = append(neighborFailureInfos, nil)
+
+		//sposto in avanti tutti i successivi elementi
+		copy(neighborFailureInfos[index+1:], neighborFailureInfos[index:])
+
+		//inseriso elemento failed
+		neighborFailureInfos[index] = target
+	}
 }
 
 // ritorna max nodi vicini o remoti in modo randomico dalla propria lista di nodi conosciuti
@@ -1082,19 +1122,23 @@ func remoteMonitoring(vivaldiClient *vivaldi.Client) {
 // nearbyMonitoring check nearby server's status
 func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 
-	var peersToUpdate []NodeRegistration
+	var peersToUpdate []*FailureInfo
 	//se c'è consistent hash attivo, ottengo i nodi più "vecchi" (per timestamp) e altri nodi in modo randomico.
 	//se invece non vi è consistent hash, ottengo solo i nodi in modo randomico
-	if config.GetBool(config.IS_CONSISTENT_HASH, false) {
-		peersToUpdate = getRandomAndOldNodes(config.GetInt(config.MAX_VIVALDI_NEAR_NODES, 16),
-			config.GetInt(config.OLD_NODES_TO_NOTIFY, 25))
-	} else {
-		peersToUpdate = getRandomNodes(false, config.GetInt(config.MAX_VIVALDI_NEAR_NODES, 16)) //risposta al todo
-	}
-	for _, registeredNode := range peersToUpdate {
-		newInfo, rtt := statusInfoRequest(&registeredNode) //recupero RTT e coordinate in status info
+	peersToUpdate = getRandomAndOldNodes(config.GetInt(config.MAX_VIVALDI_NEAR_NODES, 16),
+		config.GetInt(config.OLD_NODES_TO_NOTIFY, 25))
+
+	for _, target := range peersToUpdate {
+		registeredNode := GetPeerFromKey(target.NodeKey)
+
+		if registeredNode == nil {
+			addContactedNode(target, false)
+			continue
+		}
+		newInfo, rtt := statusInfoRequest(registeredNode) //recupero RTT e coordinate in status info
 
 		if newInfo == nil {
+			addContactedNode(target, false)
 			log.Printf("Unreachable neighbor: %s\n", registeredNode.NodeID)
 			continue
 		}
@@ -1107,11 +1151,11 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 		neighborInfo[registeredNode.Key] = newInfo
 		neighborInfo[registeredNode.Key].LastUpdateTime = time.Now().Unix()
 
-		//_, err := vivaldiClient.Update("node", &newInfo.Coordinates, rtt)		OLD
-		_, err := vivaldiClient.Update(registeredNode.NodeID.Key, &newInfo.Coordinates, rtt) //NEW
+		_, err := vivaldiClient.Update(registeredNode.NodeID.Key, &newInfo.Coordinates, rtt)
 		if err != nil {
 			log.Printf("Error while updating node coordinates: %s\n", err)
 		}
+		addContactedNode(target, true)
 		neighborMu.Unlock()
 	}
 
