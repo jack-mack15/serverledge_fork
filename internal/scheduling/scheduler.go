@@ -187,8 +187,11 @@ func handleHashRingOffload(r *scheduledRequest) {
 	if maxDistance == 0 {
 		maxDistance = 1
 	}
+	if maxHop == 0 {
+		maxHop = 1
+	}
 	var bestNode registration.NodeRegistration
-	if hashRingTargets == nil {
+	if len(hashRingTargets) == 0 {
 		//se hash ring non trova, opto per il cloud. se non si riesce con il cloud, effettuo il drop
 		log.Println("Consistent Hash: offloading in cloud")
 		handleCloudOffload(r)
@@ -202,8 +205,10 @@ func handleHashRingOffload(r *scheduledRequest) {
 	for index, elem := range hashRingTargets {
 		currPoints := (1.0 - weight) * (float64(elem.Distance.Milliseconds()) / float64(maxDistance.Milliseconds()))
 		currPoints += weight * float64(elem.HopNumb) / float64(maxHop)
+		log.Printf("TEST in selection, points: %f, hops: %d, distance: %d\n", currPoints, elem.HopNumb, elem.Distance.Milliseconds())
 		if currPoints < bestPoints {
 			best = index
+			bestPoints = currPoints
 		}
 	}
 
