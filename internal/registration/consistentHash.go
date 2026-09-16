@@ -119,20 +119,22 @@ func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, ti
 		//riempo il campo distance delle strutture HashRingTarget
 		//calcolo anche la distanza massima e il numero di hop massimi
 
-		for _, elem := range targets {
-			temp := GetStatusInfoFromKey(elem.NodeKey)
+		for i := range targets {
+			temp := GetStatusInfoFromKey(targets[i].NodeKey)
+
 			if temp != nil {
-				elem.Distance = CalculateDistanceTo(&temp.Coordinates)
+				targets[i].Distance = CalculateDistanceTo(&temp.Coordinates)
+				log.Printf("LOOOOOOGGGGGG distanza is: %d\n", targets[i].Distance.Milliseconds())
 			} else {
-				//se non ottengo info di status la distanza la imposto manualmente
-				elem.Distance = 1000
+				targets[i].Distance = 1000 * time.Millisecond
 			}
-			//calcolo valori massimi di hop e distanza
-			if elem.HopNumb > maxHop {
-				maxHop = elem.HopNumb
+
+			// Calcolo valori massimi usando gli elementi reali
+			if targets[i].HopNumb > maxHop {
+				maxHop = targets[i].HopNumb
 			}
-			if elem.Distance > maxDistance {
-				maxDistance = elem.Distance
+			if targets[i].Distance > maxDistance {
+				maxDistance = targets[i].Distance
 			}
 		}
 		return targets, maxDistance, maxHop
