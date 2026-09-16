@@ -60,7 +60,6 @@ func pickEdgeNodeForOffloading(r *scheduledRequest) (url string, err error) {
 		cacheExpiration[r.Fun.Name] = time.Now().Add(CacheValidity)
 		return bestNode.APIUrl(), nil
 	}
-
 	return "", NoSuitableNode
 }
 

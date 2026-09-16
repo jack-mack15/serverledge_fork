@@ -1072,16 +1072,19 @@ func computeNearestNeighbors(nNeighbors int) {
 		return
 	}
 
-	var distanceBuf = make([]dist, len(neighborInfo)) //distances from current server
+	var distanceBuf = make([]dist, 0, len(neighborInfo)) //distances from current server
 	for key, s := range neighborInfo {
 		distanceBuf = append(distanceBuf, dist{key, LocalVivaldiClient.DistanceTo(&s.Coordinates)})
 	}
 	sort.Slice(distanceBuf, func(i, j int) bool { return distanceBuf[i].distance < distanceBuf[j].distance })
 
-	nearestNeighbors = make([]NodeRegistration, nNeighbors)
+	nearestNeighbors = make([]NodeRegistration, 0, nNeighbors)
 	for i := 0; i < nNeighbors; i++ {
 		k := distanceBuf[i].key
-		nearestNeighbors[i] = neighbors[k]
+		//nearestNeighbors[i] = neighbors[k]
+		if n, ok := neighbors[k]; ok {
+			nearestNeighbors = append(nearestNeighbors, n)
+		}
 	}
 }
 
@@ -1126,7 +1129,7 @@ func nearbyMonitoring(vivaldiClient *vivaldi.Client) {
 	//se c'è consistent hash attivo, ottengo i nodi più "vecchi" (per timestamp) e altri nodi in modo randomico.
 	//se invece non vi è consistent hash, ottengo solo i nodi in modo randomico
 	peersToUpdate = getRandomAndOldNodes(config.GetInt(config.MAX_VIVALDI_NEAR_NODES, 16),
-		config.GetInt(config.OLD_NODES_TO_NOTIFY, 25))
+		config.GetInt(config.OLD_NODES_TO_NOTIFY, 0))
 
 	for _, target := range peersToUpdate {
 		registeredNode := GetPeerFromKey(target.NodeKey)

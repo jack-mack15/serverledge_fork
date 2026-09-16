@@ -25,21 +25,25 @@ func (p *EdgePolicy) OnCompletion(_ *function.Function, _ *function.ExecutionRep
 
 func (p *EdgePolicy) OnArrival(r *scheduledRequest) {
 
+	log.Println("ARRIVO IN ONARRIVAL")
 	if r.CanDoOffloading {
 		url, err := pickEdgeNodeForOffloading(r) // this will now take into account the node architecture in the offloading process
 		if url != "" {
+			log.Println("FINISCO QUa in on arrival")
 			handleOffload(r, url)
 			return
 		} else if errors.Is(err, NoSuitableNode) && fallBackLocally {
 			// This is the case where offloading could've been possible (I had available neighbors)
 			// but they ALL were of a mismatching architecture.
 			// E.g.: r.Fun.SupportedArchs = {"amd64"}, but all nNeighbors are arm-based.
-
+			log.Println("ALLORA FINISCO QUa in on arrival")
 			tryLocalExecution(r)
 		}
 	} else {
+		log.Println("NON POSSO FARE OFFLOAD")
 		tryLocalExecution(r)
 	}
+	log.Println("DROPPO LA RICHEISTA")
 	dropRequest(r) // r.CanDoOffloading == true, NoSuitableNode == true && fallBackLocally == false leads here, so we drop
 	// the request in that case
 }
