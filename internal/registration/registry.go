@@ -807,7 +807,7 @@ func StartMonitoring() error {
 
 // useful for test about vivaldi convergence
 func dumpCoordinates() {
-	checkTimer := time.NewTicker(time.Duration(1) * time.Second)
+	checkTimer := time.NewTicker(time.Duration(5) * time.Second)
 	for {
 		select {
 		case <-checkTimer.C:
