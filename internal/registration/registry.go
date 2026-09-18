@@ -824,7 +824,7 @@ func dumper() {
 }
 
 func monitorFailure() {
-	checkTimer := time.NewTicker(time.Duration(config.GetInt(config.REG_NEARBY_INTERVAL, 2)*3) * time.Second)
+	checkTimer := time.NewTicker(time.Duration(config.GetFloat(config.REG_NEARBY_INTERVAL, 2.0)*3) * time.Second)
 	for {
 		select {
 		case <-checkTimer.C:
@@ -855,7 +855,8 @@ func deadCollector() {
 }
 
 func runMonitor() {
-	nearbyTicker := time.NewTicker(time.Duration(config.GetInt(config.REG_NEARBY_INTERVAL, 2)) * time.Second)         //wake-up nearby globalMonitoring
+	//nearbyTicker := time.NewTicker(time.Duration(config.GetFloat(config.REG_NEARBY_INTERVAL, 1.0)) * time.Millisecond) //wake-up nearby globalMonitoring
+	nearbyTicker := time.NewTicker(time.Duration(config.GetFloat(config.REG_NEARBY_INTERVAL, 1.0) * float64(time.Second)))
 	monitoringTicker := time.NewTicker(time.Duration(config.GetInt(config.REG_MONITORING_INTERVAL, 2)) * time.Second) // wake-up general-area globalMonitoring
 	for {
 		select {
