@@ -375,7 +375,7 @@ func findAreaPharos() (string, string, error) {
 		_, rtt, currRad := anchorInfoRequest(&anchor)
 		log.Printf("Anchor: %s---- RTT is: %d and currRad is: %d\n", anchor.Key, rtt.Milliseconds(), currRad)
 		if ((currRad == 0 && rtt.Milliseconds() <
-			(int64)(time.Duration(config.GetInt(config.MAX_AREA_DISTANCE, 200))*time.Millisecond)) ||
+			(int64)(config.GetInt(config.MAX_AREA_DISTANCE, 200))) ||
 			rtt.Milliseconds() < currRad*int64(config.GetInt(config.ZONE_RADIUS_CONSTRAINT, 2))) &&
 			(rtt < minRtt) {
 			minRtt = rtt
