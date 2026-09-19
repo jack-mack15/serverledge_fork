@@ -817,7 +817,7 @@ func dumpCoordinates() {
 }
 
 func dumper() {
-	log.Printf("count:%d; X: %f; Y: %f; Z: %f; Adj: %f; Height: %f\n", counterForVivaldi, LocalVivaldiClient.GetCoordinate().Vec[0],
+	log.Printf("node: %s; count:%d; X: %f; Y: %f; Z: %f; Adj: %f; Height: %f\n", node.LocalNode.Key, counterForVivaldi, LocalVivaldiClient.GetCoordinate().Vec[0],
 		LocalVivaldiClient.GetCoordinate().Vec[1], LocalVivaldiClient.GetCoordinate().Vec[2],
 		LocalVivaldiClient.GetCoordinate().Adjustment, LocalVivaldiClient.GetCoordinate().Height)
 	counterForVivaldi++

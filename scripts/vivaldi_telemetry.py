@@ -1,17 +1,18 @@
-import re
 import csv
-import time
-import socket
-import os
 from datetime import datetime
+import os
+import re
+import socket
+import time
 
 # Configurazione dinamica
 HOSTNAME = socket.gethostname()
 CSV_FILE = f"log_{HOSTNAME}.csv"
 SERVERLEDGE_LOG_FILE = "/home/ubuntu/serverledge-tesi/serverledge.log"  # Percorso assoluto
 
-# La regex va bene: re.search ignorerà in automatico la data iniziale (2026/09/08 08:58:04)
+# Regex aggiornata per catturare anche il nome del nodo
 LOG_PATTERN = re.compile(
+    r"node:\s*(?P<node>[^;]+);\s*"
     r"count:(?P<count>\d+);\s*"
     r"X:\s*(?P<x>-?[\d\.]+);\s*"
     r"Y:\s*(?P<y>-?[\d\.]+);\s*"
@@ -22,11 +23,11 @@ LOG_PATTERN = re.compile(
 
 def main():
     print(f"Avvio telemetria. Lettura da '{SERVERLEDGE_LOG_FILE}', salvataggio su '{CSV_FILE}'...")
-    
+
     if not os.path.exists(CSV_FILE):
         with open(CSV_FILE, mode="w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["timestamp", "node_id", "counter", "x", "y", "z", "adjustment", "height"])
+            writer.writerow(["timestamp", "node_id", "name", "counter", "x", "y", "z", "adjustment", "height"])
 
     seen_entries = set()
 
@@ -34,26 +35,27 @@ def main():
         with open(SERVERLEDGE_LOG_FILE, "r") as log_file:
             while True:
                 line = log_file.readline()
-                
+
                 # Se non ci sono nuove righe, aspetta mezzo secondo
                 if not line:
                     time.sleep(0.5)
                     continue
-                
+
                 match = LOG_PATTERN.search(line)
                 if match:
                     data = match.groupdict()
                     entry_key = data["count"]
-                    
+
                     if entry_key not in seen_entries:
                         seen_entries.add(entry_key)
                         current_time = datetime.now().isoformat()
-                        
+
                         with open(CSV_FILE, mode="a", newline="") as f:
                             writer = csv.writer(f)
                             writer.writerow([
                                 current_time,
                                 HOSTNAME,
+                                data["node"].strip(),
                                 data["count"],
                                 data["x"],
                                 data["y"],
