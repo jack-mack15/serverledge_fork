@@ -167,6 +167,15 @@ func handleOffload(r *scheduledRequest, serverHost string) {
 	}
 }
 
+func consistentHashOffload(r *scheduledRequest, serverHost string) {
+	r.CanDoOffloading = true // the next server is the last one to offload if necessary
+	r.decisionChannel <- schedDecision{
+		action:     EXEC_REMOTE,
+		cont:       nil,
+		remoteHost: serverHost,
+	}
+}
+
 func handleCloudOffload(r *scheduledRequest) {
 	offloadingTarget := registration.GetRemoteOffloadingTarget()
 	if offloadingTarget == nil {
@@ -205,7 +214,7 @@ func handleHashRingOffload(r *scheduledRequest) {
 	for index, elem := range hashRingTargets {
 		currPoints := (1.0 - weight) * (float64(elem.Distance.Milliseconds()) / float64(maxDistance.Milliseconds()))
 		currPoints += weight * float64(elem.HopNumb) / float64(maxHop)
-		log.Printf("TEST in selection, points: %f, hops: %d, distance: %d\n", currPoints, elem.HopNumb, elem.Distance.Milliseconds())
+		//log.Printf("TEST in selection, points: %f, hops: %d, distance: %d\n", currPoints, elem.HopNumb, elem.Distance.Milliseconds())
 		if currPoints < bestPoints {
 			best = index
 			bestPoints = currPoints
@@ -227,5 +236,14 @@ func handleHashRingOffload(r *scheduledRequest) {
 		return
 	}
 	log.Println("Consistent Hash: offloading in edge")
-	handleOffload(r, bestNode.APIUrl())
+	consistentHashOffload(r, bestNode.APIUrl())
+}
+
+func handleLastChanceOffload(r *scheduledRequest) {
+	target := registration.GetLastChanceTarget(r.Fun, node.LocalNode.Key)
+	if target != nil {
+		//mando la richiesta a questo nodo
+		host := registration.GetPeerFromKey(target.Name)
+		handleOffload(r, host.APIUrl())
+	}
 }

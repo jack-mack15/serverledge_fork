@@ -28,8 +28,8 @@ func SetUpRing(nodes map[string]NodeRegistration) {
 
 	REPLICAS := config.GetInt(config.REPLICAS, 128)
 	log.Printf("Running Consistent Hashing with %d replicas per node in the hash rings\n", REPLICAS)
-	localHashRing.armRing = hashring.NewHashRing(REPLICAS)
-	localHashRing.x86Ring = hashring.NewHashRing(REPLICAS)
+	localHashRing.armRing = hashring.NewConsistentHashRing(REPLICAS)
+	localHashRing.x86Ring = hashring.NewConsistentHashRing(REPLICAS)
 	hashring.InitOfflineNodes()
 	if len(nodes) == 0 {
 		return
@@ -124,7 +124,6 @@ func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, ti
 
 			if temp != nil {
 				targets[i].Distance = CalculateDistanceTo(&temp.Coordinates)
-				log.Printf("LOOOOOOGGGGGG distanza is: %d\n", targets[i].Distance.Milliseconds())
 			} else {
 				targets[i].Distance = 1000 * time.Millisecond
 			}
@@ -140,6 +139,23 @@ func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, ti
 		return targets, maxDistance, maxHop
 	}
 	return nil, maxDistance, maxHop
+}
+
+func GetLastChanceTarget(f *function.Function, myId string) *middleware.ProxyTarget {
+	for _, arch := range f.SupportedArchs {
+		ring, mu := getRingByArch(arch)
+		if ring == nil {
+			continue
+		}
+		mu.RLock()
+		//ottengo il nodo successivo a me nel ring
+		target := ring.GetNext(myId)
+		mu.RUnlock()
+
+		return target
+	}
+
+	return nil
 }
 
 // ritorna il primo elemento dello stesso ring in cui era situata la vecchia anchor.

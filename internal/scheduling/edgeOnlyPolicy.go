@@ -57,7 +57,7 @@ func tryLocalExecution(r *scheduledRequest) {
 
 	}
 
-	containerID, warm, err := node.AcquireContainer(r.Fun, false)
+	containerID, warm, err := node.AcquireContainer(r.Fun, false) //outofresources
 	if err == nil {
 		execLocally(r, containerID, warm)
 		return

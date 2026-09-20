@@ -6,10 +6,13 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/serverledge-faas/serverledge/internal/config"
 	"github.com/serverledge-faas/serverledge/internal/function"
 )
 
 var AllMemoryAvailable = int64(10_000_000) // A high value to symbolize all memory is free
+
+var LoadBound = config.GetFloat(config.LOAD_BOUND_PERCENT, 0.0)
 
 type HashRingTarget struct {
 	NodeKey  string
@@ -31,6 +34,20 @@ func (m *DefaultMemoryChecker) HasEnoughMemory(candidate *middleware.ProxyTarget
 	log.Printf("Candidate has: %d MB free memory. Function needs: %d MB", freeMemoryMB, fun.MemoryMB)
 	return freeMemoryMB >= fun.MemoryMB && freeCpu >= fun.CPUDemand
 
+}
+
+type ConsistentHashChecker struct{}
+
+func (m *ConsistentHashChecker) HasEnoughMemory(candidate *middleware.ProxyTarget, fun *function.Function) bool {
+	memLoad, cpuLoad := NodeMetrics.GetLoads(candidate.Name)
+	freeMemoryMB := NodeMetrics.GetFreeMemory(candidate.Name)
+	freeCpu := NodeMetrics.metrics[candidate.Name].FreeCPU
+	log.Printf("Candidate has: %d MB free memory. Function needs: %d MB", freeMemoryMB, fun.MemoryMB)
+	if memLoad >= LoadBound && cpuLoad >= LoadBound &&
+		freeMemoryMB >= fun.MemoryMB && freeCpu >= fun.CPUDemand {
+		return true
+	}
+	return false
 }
 
 var NodeMetrics = &NodeMetricCache{
@@ -83,6 +100,19 @@ func (c *NodeMetricCache) GetFreeMemory(nodeName string) int64 {
 	}
 
 	return val.FreeMemoryMB
+}
+
+func (c *NodeMetricCache) GetLoads(nodeName string) (float64, float64) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	val, ok := c.metrics[nodeName]
+	if ok && val.TotalMemoryMB != 0 && val.TotalCPU != 0 {
+		memoryLoad := float64(val.FreeMemoryMB) / float64(val.TotalMemoryMB)
+		cpuLoad := val.FreeCPU / val.TotalCPU
+		return memoryLoad, cpuLoad
+	}
+	return 0, 0
 }
 
 func (c *NodeMetricCache) GetCpu(nodeName string) float64 {

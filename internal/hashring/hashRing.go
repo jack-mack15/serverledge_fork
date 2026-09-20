@@ -36,6 +36,17 @@ func NewHashRing(replicas int) *HashRing {
 	}
 }
 
+func NewConsistentHashRing(replicas int) *HashRing {
+
+	return &HashRing{
+		replicas:   replicas,
+		ring:       make([]uint32, 0),
+		targets:    make(map[uint32]*middleware.ProxyTarget),
+		TargetList: make([]*middleware.ProxyTarget, 0),
+		MemChecker: &ConsistentHashChecker{},
+	}
+}
+
 func (r *HashRing) Add(t *middleware.ProxyTarget) {
 	// put replicas in the ring. To do so we'll hash the node's name + an incrementing number
 	log.Println("Hash Ring Adding new replicas for node " + t.Name)
@@ -94,6 +105,22 @@ func (r *HashRing) Get(fun *function.Function) *middleware.ProxyTarget {
 
 	return nil // no suitable node found
 
+}
+
+func (r *HashRing) GetNext(node string) *middleware.ProxyTarget {
+	if len(r.ring) == 0 {
+		return nil
+	}
+
+	h := hash(node)
+
+	idx := sort.Search(len(r.ring), func(i int) bool { return r.ring[i] >= h })
+	if idx == len(r.ring) {
+		idx = 0
+	}
+	candidate := r.targets[r.ring[idx]]
+
+	return candidate
 }
 
 // variante di Get che ritorna i primi max elementi successivi (e disponibili) data una funzione
