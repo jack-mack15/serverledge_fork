@@ -21,6 +21,7 @@ func (p *ConsistentHashPolicy) OnCompletion(f *function.Function, report *functi
 }
 
 func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
+	log.Println("ON ARRIVAL: OnArrival")
 	if r.offloaded {
 		//qualche nodo ha designato me come nodo per la richiesta
 		err := tryLocalExecutionConsistentHash(r)
@@ -54,6 +55,7 @@ func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 }
 
 func tryLocalExecutionConsistentHash(r *scheduledRequest) error {
+	log.Println("LOCAL EXEC: try local execution")
 	if !r.Fun.SupportsArch(node.LocalNode.Arch) {
 		//should not happen
 		dropRequest(r)
