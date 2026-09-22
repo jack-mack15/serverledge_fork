@@ -824,7 +824,7 @@ func dumper() {
 }
 
 func monitorFailure() {
-	checkTimer := time.NewTicker(time.Duration(config.GetFloat(config.REG_NEARBY_INTERVAL, 2.0)*3) * time.Second)
+	checkTimer := time.NewTicker(time.Duration(config.GetFloat(config.REG_NEARBY_INTERVAL, 2.0) * 3.0 * float64(time.Second)))
 	for {
 		select {
 		case <-checkTimer.C:
