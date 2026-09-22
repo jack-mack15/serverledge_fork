@@ -30,6 +30,7 @@ func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 
 		if errors.Is(err, node.OutOfResourcesErr) && r.CanDoOffloading {
 			//non ho risorse per gestirla, la mando al prossimo sull'anello, last chance
+			log.Println("CHP: trying last chance")
 			handleLastChanceOffload(r)
 			return
 
