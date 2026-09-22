@@ -21,7 +21,7 @@ func (p *ConsistentHashPolicy) OnCompletion(f *function.Function, report *functi
 }
 
 func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
-	log.Println("ON ARRIVAL: OnArrival")
+	log.Println("ON ARRIVAL SUBITO")
 	if r.offloaded {
 		//qualche nodo ha designato me come nodo per la richiesta
 		err := tryLocalExecutionConsistentHash(r)
@@ -31,6 +31,7 @@ func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 
 		if errors.Is(err, node.OutOfResourcesErr) && r.CanDoOffloading {
 			//non ho risorse per gestirla, la mando al prossimo sull'anello, last chance
+			log.Println("LAST CHANCEEEEEE")
 			handleLastChanceOffload(r)
 			return
 

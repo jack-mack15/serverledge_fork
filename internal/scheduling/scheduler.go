@@ -245,5 +245,7 @@ func handleLastChanceOffload(r *scheduledRequest) {
 		//mando la richiesta a questo nodo
 		host := registration.GetPeerFromKey(target.Name)
 		handleOffload(r, host.APIUrl())
+	} else {
+		dropRequest(r)
 	}
 }
