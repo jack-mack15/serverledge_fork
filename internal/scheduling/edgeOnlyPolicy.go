@@ -1,7 +1,6 @@
 package scheduling
 
 import (
-	"errors"
 	"log"
 
 	"github.com/serverledge-faas/serverledge/internal/config"
@@ -25,41 +24,37 @@ func (p *EdgePolicy) OnCompletion(_ *function.Function, _ *function.ExecutionRep
 
 func (p *EdgePolicy) OnArrival(r *scheduledRequest) {
 
-	log.Println("ARRIVO IN ONARRIVAL")
-	if r.CanDoOffloading {
-		url, err := pickEdgeNodeForOffloading(r) // this will now take into account the node architecture in the offloading process
+	//tento di eseguire prima in locale
+	err := tryLocalExecution(r)
+
+	if err != nil && r.CanDoOffloading {
+
+		url, _ := pickEdgeNodeForOffloading(r) // this will now take into account the node architecture in the offloading process
 		if url != "" {
-			log.Println("FINISCO QUa in on arrival")
+			log.Println("Risorse insufficienti: Offloading della richiesta")
 			handleOffload(r, url)
 			return
-		} else if errors.Is(err, NoSuitableNode) && fallBackLocally {
-			// This is the case where offloading could've been possible (I had available neighbors)
-			// but they ALL were of a mismatching architecture.
-			// E.g.: r.Fun.SupportedArchs = {"amd64"}, but all nNeighbors are arm-based.
-			log.Println("ALLORA FINISCO QUa in on arrival")
-			tryLocalExecution(r)
 		}
-	} else {
-		log.Println("NON POSSO FARE OFFLOAD")
-		tryLocalExecution(r)
 	}
-	log.Println("DROPPO LA RICHEISTA")
+
+	log.Println("Dropping request")
 	dropRequest(r) // r.CanDoOffloading == true, NoSuitableNode == true && fallBackLocally == false leads here, so we drop
 	// the request in that case
 }
 
-func tryLocalExecution(r *scheduledRequest) {
+func tryLocalExecution(r *scheduledRequest) error {
 	if !r.Fun.SupportsArch(node.LocalNode.Arch) {
 		// If the current node architecture is not supported by the function's runtime, we can only drop it, since
 		// offloading was already tried unsuccessfully, or it was disabled for this request.
 		dropRequest(r)
-		return
-
+		return nil
 	}
 
-	containerID, warm, err := node.AcquireContainer(r.Fun, false) //outofresources
+	containerID, warm, err := node.AcquireContainer(r.Fun, false)
 	if err == nil {
 		execLocally(r, containerID, warm)
-		return
+		return nil
 	}
+
+	return err
 }

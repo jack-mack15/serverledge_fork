@@ -212,3 +212,7 @@ func getReverseRingByArch(arch string) (*hashring.HashRing, *sync.RWMutex) {
 		return nil, nil
 	}
 }
+
+func GetConsistentHashRing() CompleteHashRing {
+	return localHashRing
+}
