@@ -785,6 +785,11 @@ func StartMonitoring() error {
 		neighborFailureInfos = append(neighborFailureInfos, &temp)
 	}
 
+	//setup delle risorse nodo corrente per consistent hash
+	if config.GetBool(config.IS_CONSISTENT_HASH, false) {
+		SetUpLocalNodeResources()
+	}
+
 	//complete globalMonitoring phase at startup
 	globalMonitoring()
 

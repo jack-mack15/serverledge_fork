@@ -11,6 +11,7 @@ import (
 	"github.com/serverledge-faas/serverledge/internal/config"
 	"github.com/serverledge-faas/serverledge/internal/function"
 	"github.com/serverledge-faas/serverledge/internal/hashring"
+	"github.com/serverledge-faas/serverledge/internal/node"
 )
 
 type CompleteHashRing struct {
@@ -49,6 +50,14 @@ func SetUpRing(nodes map[string]NodeRegistration) {
 			ring.Add(target)
 		}
 	}
+}
+
+func SetUpLocalNodeResources() {
+	//setup delle mie risorse nell'hash ring
+	log.Printf("TEST SETUP: memory: %d\n", node.LocalResources.TotalMemory())
+	hashring.NodeMetrics.Update(node.LocalNode.Key, node.LocalResources.TotalMemory(),
+		node.LocalResources.TotalMemory(), int64(node.LocalResources.AvailableCPUs()),
+		node.LocalResources.AvailableCPUs())
 }
 
 // ConsistentHashRemoveNode rimuove un elemento dalla mappa di nodi e dall'hash ring
@@ -179,10 +188,16 @@ func GetNewAnchor(arch string) string {
 	return newAnchor
 }
 
-func UpdateResources(node string, memory int64, cpu float64) {
-	freeMemMB := hashring.NodeMetrics.GetFreeMemory(node) - memory
-	freeCpu := hashring.NodeMetrics.GetCpu(node) - cpu
-	hashring.NodeMetrics.Update(node, freeMemMB, 0, time.Now().Unix(), freeCpu)
+func UpdateResources(node string, memory int64, cpu float64, hasToRemove bool) {
+	if hasToRemove {
+		freeMemMB := hashring.NodeMetrics.GetFreeMemory(node) - memory
+		freeCpu := hashring.NodeMetrics.GetCpu(node) - cpu
+		hashring.NodeMetrics.Update(node, freeMemMB, 0, time.Now().Unix(), freeCpu)
+	} else {
+		freeMemMB := hashring.NodeMetrics.GetFreeMemory(node) + memory
+		freeCpu := hashring.NodeMetrics.GetCpu(node) + cpu
+		hashring.NodeMetrics.Update(node, freeMemMB, 0, time.Now().Unix(), freeCpu)
+	}
 }
 
 func RestoreResources(node string, memory int64, cpu float64) {
