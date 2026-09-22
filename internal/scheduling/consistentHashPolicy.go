@@ -35,6 +35,7 @@ func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 
 		} else {
 			//non ho scelta, la scarto
+			log.Println("DROP: Dropping request " + r.Fun.Name)
 			dropRequest(r)
 			return
 		}
