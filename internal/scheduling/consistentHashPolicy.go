@@ -45,7 +45,7 @@ func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 		if r.CanDoOffloading {
 			r.offloaded = true
 			//in questo modo il prossimo nodo deve gestirla
-			log.Println("CHP: offloading to name " + r.Fun.Name + " runtime " + r.Fun.SupportedArchs[0])
+			log.Println("CHP: offloading name " + r.Fun.Name + " runtime " + r.Fun.SupportedArchs[0])
 			handleHashRingOffload(r) // This will also check for architecture compatibility
 			return
 		}

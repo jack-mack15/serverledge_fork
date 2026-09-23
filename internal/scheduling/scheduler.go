@@ -199,6 +199,10 @@ func handleHashRingOffload(r *scheduledRequest) {
 	if maxHop == 0 {
 		maxHop = 1
 	}
+	if hashRingTargets == nil {
+		log.Println("------------------------hashringTargets è vuoto")
+	}
+
 	var bestNode registration.NodeRegistration
 	if len(hashRingTargets) == 0 {
 		//se hash ring non trova, opto per il cloud. se non si riesce con il cloud, effettuo il drop

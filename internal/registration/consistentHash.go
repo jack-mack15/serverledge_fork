@@ -151,6 +151,7 @@ func GetTargetsFromHashRing(f *function.Function) ([]hashring.HashRingTarget, ti
 }
 
 func GetLastChanceTarget(f *function.Function, myId string) *middleware.ProxyTarget {
+	log.Println("------------ENTRO QUA?")
 	for _, arch := range f.SupportedArchs {
 		ring, mu := getRingByArch(arch)
 		if ring == nil {
