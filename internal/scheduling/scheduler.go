@@ -212,6 +212,7 @@ func handleHashRingOffload(r *scheduledRequest) {
 	}
 
 	//calcolo del punteggio
+	log.Println("-----------Consistent Hash: calcolo pesi")
 	weight := config.GetFloat(config.CONSISTENT_HASH_WEIGHT, 0.5)
 	var best int
 	bestPoints := 1.0
@@ -225,9 +226,11 @@ func handleHashRingOffload(r *scheduledRequest) {
 		}
 	}
 
+	log.Println("-----------Consistent Hash: recupero peer")
 	bestNode = *registration.GetPeerFromKey(hashRingTargets[best].NodeKey)
-	
+
 	//il nodo corrente deve gestire l'esecuzione
+	log.Println("-----------Consistent Hash: controllo se sono io")
 	if bestNode.Key == node.LocalNode.Key {
 		registration.UpdateResources(bestNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, true)
 		containerID, warm, err := node.AcquireContainer(r.Fun, false)
@@ -237,7 +240,7 @@ func handleHashRingOffload(r *scheduledRequest) {
 			registration.UpdateResources(bestNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, false)
 			return
 		}
-
+		log.Println("-----------Consistent Hash: ci sta un errore??")
 		return
 	}
 	log.Println("Consistent Hash: offloading in edge")
