@@ -189,7 +189,7 @@ func handleCloudOffload(r *scheduledRequest) {
 	}
 }
 
-func handleHashRingOffload(r *scheduledRequest) {
+func handleHashRingOffload(r *scheduledRequest) error {
 	//cerco numero di nodi target dall'hash ring. il numero di questi nodi è pari a hash.ring.targets o 5
 	hashRingTargets, maxDistance, maxHop := registration.GetTargetsFromHashRing(r.Fun)
 	//se distanze ancora non sono impostate
@@ -199,20 +199,16 @@ func handleHashRingOffload(r *scheduledRequest) {
 	if maxHop == 0 {
 		maxHop = 1
 	}
-	if hashRingTargets == nil {
-		log.Println("------------------------hashringTargets è vuoto")
-	}
 
 	var bestNode registration.NodeRegistration
 	if len(hashRingTargets) == 0 {
 		//se hash ring non trova, opto per il cloud. se non si riesce con il cloud, effettuo il drop
 		log.Println("Consistent Hash: offloading in cloud")
 		handleCloudOffload(r)
-		return
+		return nil
 	}
 
 	//calcolo del punteggio
-	log.Println("-----------Consistent Hash: calcolo pesi")
 	weight := config.GetFloat(config.CONSISTENT_HASH_WEIGHT, 0.5)
 	var best int
 	bestPoints := 1.0
@@ -226,25 +222,24 @@ func handleHashRingOffload(r *scheduledRequest) {
 		}
 	}
 
-	log.Println("-----------Consistent Hash: recupero peer")
 	bestNode = *registration.GetPeerFromKey(hashRingTargets[best].NodeKey)
 
 	//il nodo corrente deve gestire l'esecuzione
-	log.Println("-----------Consistent Hash: controllo se sono io")
 	if bestNode.Key == node.LocalNode.Key {
-		registration.UpdateResources(bestNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, true)
 		containerID, warm, err := node.AcquireContainer(r.Fun, false)
 		if err == nil {
 			log.Println("Consistent Hash: execution locally")
+			registration.UpdateResources(bestNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, true)
 			execLocally(r, containerID, warm)
 			registration.UpdateResources(bestNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, false)
-			return
+			return nil
 		}
-		log.Println("-----------Consistent Hash: ci sta un errore??")
-		return
+		return err
 	}
 	log.Println("Consistent Hash: offloading in edge")
 	consistentHashOffload(r, bestNode.APIUrl())
+
+	return nil
 }
 
 func handleLastChanceOffload(r *scheduledRequest) {

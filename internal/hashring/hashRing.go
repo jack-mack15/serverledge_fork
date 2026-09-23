@@ -147,7 +147,6 @@ func (r *HashRing) GetMultiple(fun *function.Function, max int) []HashRingTarget
 	var targets []HashRingTarget
 
 	hopCount := 0
-	log.Println("------------------------GetMultiple entro nel for")
 	for {
 		candidate := r.targets[r.ring[idx]]
 		_, alreadySeen := seen[candidate.Name]
@@ -181,7 +180,6 @@ func (r *HashRing) GetMultiple(fun *function.Function, max int) []HashRingTarget
 			break
 		}
 	}
-	log.Println("------------------------GetMultiple esco dal for")
 
 	return targets
 }

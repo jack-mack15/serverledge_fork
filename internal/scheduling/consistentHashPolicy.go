@@ -46,8 +46,13 @@ func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 			r.offloaded = true
 			//in questo modo il prossimo nodo deve gestirla
 			log.Println("CHP: offloading name " + r.Fun.Name + " runtime " + r.Fun.SupportedArchs[0])
-			handleHashRingOffload(r) // This will also check for architecture compatibility
-			return
+			err := handleHashRingOffload(r) // This will also check for architecture compatibility
+
+			if err != nil {
+				dropRequest(r)
+				return
+			}
+
 		}
 	}
 	//se non l'ho già gestita, la gestisco io
