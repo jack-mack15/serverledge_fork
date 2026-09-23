@@ -162,13 +162,13 @@ func (c *NodeMetricCache) GetMetrics(nodeName string) (int64, float64, float64, 
 
 	val, ok := c.metrics[nodeName]
 	if !ok {
-		var memoryLoad float64
-		var cpuLoad float64
-		if val.TotalMemoryMB != 0 && val.TotalCPU != 0 {
-			memoryLoad = float64(val.FreeMemoryMB) / float64(val.TotalMemoryMB)
-			cpuLoad = val.FreeCPU / val.TotalCPU
-		}
-		return val.FreeMemoryMB,val.FreeCPU, memoryLoad, cpuLoad
+		return 0, 0, 0, 0
 	}
-	return 0,0,0,0
+	var memoryLoad float64
+	var cpuLoad float64
+	if val.TotalMemoryMB != 0 && val.TotalCPU != 0 {
+		memoryLoad = float64(val.FreeMemoryMB) / float64(val.TotalMemoryMB)
+		cpuLoad = val.FreeCPU / val.TotalCPU
+	}
+	return val.FreeMemoryMB, val.FreeCPU, memoryLoad, cpuLoad
 }
