@@ -6,8 +6,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/serverledge-faas/serverledge/internal/config"
 	"github.com/serverledge-faas/serverledge/internal/function"
+	"github.com/serverledge-faas/serverledge/internal/hashring"
 	"github.com/serverledge-faas/serverledge/internal/node"
-	"github.com/serverledge-faas/serverledge/internal/registration"
 )
 
 type ConsistentHashPolicy struct{}
@@ -49,6 +49,7 @@ func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 			err := handleHashRingOffload(r) // This will also check for architecture compatibility
 
 			if err != nil {
+				log.Println("CHP: dropping request " + r.Fun.Name)
 				dropRequest(r)
 				return
 			}
@@ -69,9 +70,8 @@ func tryLocalExecutionConsistentHash(r *scheduledRequest) error {
 	containerID, warm, err := node.AcquireContainer(r.Fun, false)
 	if err == nil {
 		log.Println("CHP: local execution")
-		registration.UpdateResources(node.LocalNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, true)
+		hashring.NodeMetrics.UpdateResources(node.LocalNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, true)
 		execLocally(r, containerID, warm)
-		registration.UpdateResources(node.LocalNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, false)
 		return nil
 	}
 

@@ -8,6 +8,7 @@ import (
 	"github.com/serverledge-faas/serverledge/internal/config"
 	"github.com/serverledge-faas/serverledge/internal/container"
 	"github.com/serverledge-faas/serverledge/internal/function"
+	"github.com/serverledge-faas/serverledge/internal/hashring"
 )
 
 type ContainerPool struct {
@@ -182,6 +183,10 @@ func HandleCompletion(cont *container.Container, f *function.Function) {
 		LocalResources.usedCPUs -= f.CPUDemand
 		LocalResources.busyPoolUsedMem -= f.MemoryMB
 		LocalResources.warmPoolUsedMem += f.MemoryMB
+
+		//resetto risorse di NodeMetrics
+		me := LocalNode.Key
+		hashring.NodeMetrics.UpdateResources(me, f.MemoryMB, f.CPUDemand, false)
 	}
 }
 

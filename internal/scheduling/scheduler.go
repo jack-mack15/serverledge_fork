@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/serverledge-faas/serverledge/internal/config"
+	"github.com/serverledge-faas/serverledge/internal/hashring"
 	"github.com/serverledge-faas/serverledge/internal/registration"
 
 	"github.com/serverledge-faas/serverledge/internal/container"
@@ -229,9 +230,8 @@ func handleHashRingOffload(r *scheduledRequest) error {
 		containerID, warm, err := node.AcquireContainer(r.Fun, false)
 		if err == nil {
 			log.Println("Consistent Hash: execution locally")
-			registration.UpdateResources(bestNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, true)
+			hashring.NodeMetrics.UpdateResources(bestNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, true)
 			execLocally(r, containerID, warm)
-			registration.UpdateResources(bestNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, false)
 			return nil
 		}
 		return err

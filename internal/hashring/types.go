@@ -89,6 +89,36 @@ func (c *NodeMetricCache) Update(nodeName string, freeMemMB int64, totalMemMB in
 	}
 }
 
+func (c *NodeMetricCache) UpdateResources(nodeName string, usedMem int64, usedCPUs float64, hasToRemove bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	curr, ok := c.metrics[nodeName]
+	updateTime := time.Now().Unix()
+	if ok && (updateTime < curr.LastUpdate) {
+		return //not possible
+	}
+
+	totalMemMB := curr.TotalMemoryMB
+
+	var freeMemMB int64
+	var freeCpu float64
+
+	if hasToRemove {
+		freeMemMB = curr.FreeMemoryMB - usedMem
+		freeCpu = curr.FreeCPU - usedCPUs
+	} else {
+		freeMemMB = curr.FreeMemoryMB + usedMem
+		freeCpu = curr.FreeCPU + usedCPUs
+	}
+
+	c.metrics[nodeName] = NodeMetric{
+		TotalMemoryMB: totalMemMB,
+		FreeMemoryMB:  freeMemMB,
+		LastUpdate:    updateTime,
+		FreeCPU:       freeCpu,
+	}
+}
+
 func (c *NodeMetricCache) GetFreeMemory(nodeName string) int64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

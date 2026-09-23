@@ -188,22 +188,6 @@ func GetNewAnchor(arch string) string {
 	return newAnchor
 }
 
-func UpdateResources(node string, memory int64, cpu float64, hasToRemove bool) {
-	if hasToRemove {
-		freeMemMB := hashring.NodeMetrics.GetFreeMemory(node) - memory
-		freeCpu := hashring.NodeMetrics.GetCpu(node) - cpu
-		hashring.NodeMetrics.Update(node, freeMemMB, 0, time.Now().Unix(), freeCpu)
-	} else {
-		freeMemMB := hashring.NodeMetrics.GetFreeMemory(node) + memory
-		freeCpu := hashring.NodeMetrics.GetCpu(node) + cpu
-		hashring.NodeMetrics.Update(node, freeMemMB, 0, time.Now().Unix(), freeCpu)
-	}
-}
-
-func RestoreResources(node string, memory int64, cpu float64) {
-
-}
-
 func getRingByArch(arch string) (*hashring.HashRing, *sync.RWMutex) {
 	switch arch {
 	case "arm64":
