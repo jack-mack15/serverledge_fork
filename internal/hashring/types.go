@@ -12,8 +12,6 @@ import (
 
 var AllMemoryAvailable = int64(10_000_000) // A high value to symbolize all memory is free
 
-var LoadBound = config.GetFloat(config.LOAD_BOUND_PERCENT, 0.0)
-
 type HashRingTarget struct {
 	NodeKey  string
 	HopNumb  int
@@ -39,10 +37,11 @@ func (m *DefaultMemoryChecker) HasEnoughMemory(candidate *middleware.ProxyTarget
 type ConsistentHashChecker struct{}
 
 func (m *ConsistentHashChecker) HasEnoughMemory(candidate *middleware.ProxyTarget, fun *function.Function) bool {
-	freeMemoryMB, freeCpu, memLoad, cpuLoad := NodeMetrics.GetMetrics(candidate.Name)
+	freeMemoryMB, freeCpu, memLoad := NodeMetrics.GetMetrics(candidate.Name)
+	LoadBound := config.GetFloat(config.LOAD_BOUND_PERCENT, 0.0)
 
 	log.Printf("Candidate %s has: %d MB free memory. Function needs: %d MB", candidate.Name, freeMemoryMB, fun.MemoryMB)
-	if memLoad >= LoadBound && cpuLoad >= LoadBound &&
+	if memLoad <= LoadBound &&
 		freeMemoryMB >= fun.MemoryMB && freeCpu >= fun.CPUDemand {
 		return true
 	}
@@ -156,19 +155,18 @@ func (c *NodeMetricCache) GetCpu(nodeName string) float64 {
 	return val.FreeCPU
 }
 
-func (c *NodeMetricCache) GetMetrics(nodeName string) (int64, float64, float64, float64) {
+func (c *NodeMetricCache) GetMetrics(nodeName string) (int64, float64, float64) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	val, ok := c.metrics[nodeName]
 	if !ok {
-		return 0, 0, 0, 0
+		return 0, 0, 0
 	}
 	var memoryLoad float64
-	var cpuLoad float64
-	if val.TotalMemoryMB != 0 && val.TotalCPU != 0 {
+	log.Printf("TEST:%d\n", val.TotalMemoryMB)
+	if val.TotalMemoryMB != 0 {
 		memoryLoad = float64(val.FreeMemoryMB) / float64(val.TotalMemoryMB)
-		cpuLoad = val.FreeCPU / val.TotalCPU
 	}
-	return val.FreeMemoryMB, val.FreeCPU, memoryLoad, cpuLoad
+	return val.FreeMemoryMB, val.FreeCPU, memoryLoad
 }
