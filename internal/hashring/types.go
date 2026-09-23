@@ -39,9 +39,8 @@ func (m *DefaultMemoryChecker) HasEnoughMemory(candidate *middleware.ProxyTarget
 type ConsistentHashChecker struct{}
 
 func (m *ConsistentHashChecker) HasEnoughMemory(candidate *middleware.ProxyTarget, fun *function.Function) bool {
-	memLoad, cpuLoad := NodeMetrics.GetLoads(candidate.Name)
-	freeMemoryMB := NodeMetrics.GetFreeMemory(candidate.Name)
-	freeCpu := NodeMetrics.metrics[candidate.Name].FreeCPU
+	freeMemoryMB, freeCpu, memLoad, cpuLoad := NodeMetrics.GetMetrics(candidate.Name)
+
 	log.Printf("Candidate %s has: %d MB free memory. Function needs: %d MB", candidate.Name, freeMemoryMB, fun.MemoryMB)
 	if memLoad >= LoadBound && cpuLoad >= LoadBound &&
 		freeMemoryMB >= fun.MemoryMB && freeCpu >= fun.CPUDemand {
@@ -155,4 +154,21 @@ func (c *NodeMetricCache) GetCpu(nodeName string) float64 {
 	}
 
 	return val.FreeCPU
+}
+
+func (c *NodeMetricCache) GetMetrics(nodeName string) (int64, float64, float64, float64) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	val, ok := c.metrics[nodeName]
+	if !ok {
+		var memoryLoad float64
+		var cpuLoad float64
+		if val.TotalMemoryMB != 0 && val.TotalCPU != 0 {
+			memoryLoad = float64(val.FreeMemoryMB) / float64(val.TotalMemoryMB)
+			cpuLoad = val.FreeCPU / val.TotalCPU
+		}
+		return val.FreeMemoryMB,val.FreeCPU, memoryLoad, cpuLoad
+	}
+	return 0,0,0,0
 }
