@@ -226,7 +226,7 @@ func handleHashRingOffload(r *scheduledRequest) {
 	}
 
 	bestNode = *registration.GetPeerFromKey(hashRingTargets[best].NodeKey)
-
+	
 	//il nodo corrente deve gestire l'esecuzione
 	if bestNode.Key == node.LocalNode.Key {
 		registration.UpdateResources(bestNode.Key, r.Fun.MemoryMB, r.Fun.CPUDemand, true)
