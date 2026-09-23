@@ -52,7 +52,7 @@ func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 				dropRequest(r)
 				return
 			}
-
+			return
 		}
 	}
 	//se non l'ho già gestita, la gestisco io

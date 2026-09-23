@@ -163,6 +163,7 @@ func (r *HashRing) GetMultiple(fun *function.Function, max int) []HashRingTarget
 					HopNumb:  hopCount,
 					Distance: 0,
 				}
+				log.Println("Selected node " + candidate.Name)
 				targets = append(targets, temp)
 
 				//controllo se ho preso i primi max nodi

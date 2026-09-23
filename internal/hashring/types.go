@@ -42,7 +42,7 @@ func (m *ConsistentHashChecker) HasEnoughMemory(candidate *middleware.ProxyTarge
 	memLoad, cpuLoad := NodeMetrics.GetLoads(candidate.Name)
 	freeMemoryMB := NodeMetrics.GetFreeMemory(candidate.Name)
 	freeCpu := NodeMetrics.metrics[candidate.Name].FreeCPU
-	log.Printf("Candidate has: %d MB free memory. Function needs: %d MB", freeMemoryMB, fun.MemoryMB)
+	log.Printf("Candidate %s has: %d MB free memory. Function needs: %d MB", candidate.Name, freeMemoryMB, fun.MemoryMB)
 	if memLoad >= LoadBound && cpuLoad >= LoadBound &&
 		freeMemoryMB >= fun.MemoryMB && freeCpu >= fun.CPUDemand {
 		return true
