@@ -30,7 +30,7 @@ type DefaultMemoryChecker struct{}
 
 func (m *DefaultMemoryChecker) HasEnoughMemory(candidate *middleware.ProxyTarget, fun *function.Function) bool {
 	freeMemoryMB := NodeMetrics.GetFreeMemory(candidate.Name)
-	freeCpu := NodeMetrics.metrics[candidate.Name].FreeCPU
+	freeCpu := NodeMetrics.GetCpu(candidate.Name)
 	log.Printf("Candidate has: %d MB free memory. Function needs: %d MB", freeMemoryMB, fun.MemoryMB)
 	return freeMemoryMB >= fun.MemoryMB && freeCpu >= fun.CPUDemand
 
@@ -89,8 +89,8 @@ func (c *NodeMetricCache) Update(nodeName string, freeMemMB int64, totalMemMB in
 }
 
 func (c *NodeMetricCache) UpdateResources(nodeName string, usedMem int64, usedCPUs float64, hasToRemove bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	curr, ok := c.metrics[nodeName]
 	updateTime := time.Now().Unix()
 	if ok && (updateTime < curr.LastUpdate) {
