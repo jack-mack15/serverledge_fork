@@ -3,7 +3,6 @@ package scheduling
 import (
 	"log"
 
-	"github.com/pkg/errors"
 	"github.com/serverledge-faas/serverledge/internal/config"
 	"github.com/serverledge-faas/serverledge/internal/function"
 	"github.com/serverledge-faas/serverledge/internal/hashring"
@@ -23,7 +22,9 @@ func (p *ConsistentHashPolicy) OnCompletion(f *function.Function, report *functi
 func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 	if r.offloaded {
 		//qualche nodo ha designato me come nodo per la richiesta
-		err := tryLocalExecutionConsistentHash(r)
+		_ = tryLocalExecutionConsistentHash(r)
+		return
+		/*
 		if err == nil {
 			return
 		}
@@ -39,7 +40,7 @@ func (p *ConsistentHashPolicy) OnArrival(r *scheduledRequest) {
 			log.Println("CHP: dropping request " + r.Fun.Name)
 			dropRequest(r)
 			return
-		}
+		}*/
 	} else {
 		//prima volta che la richiesta viene schedlata
 		if r.CanDoOffloading {

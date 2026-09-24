@@ -1197,14 +1197,27 @@ func GetPeerFromKey(key string) *NodeRegistration {
 	return &reg
 }
 
-func GetRemoteFromKey(key string) *NodeRegistration {
-	remoteMu.RLock()
-	defer remoteMu.RUnlock()
-	reg, ok := remoteNodes[key]
-	if !ok {
-		return nil
+func GetRandomNodeUrl() string {
+	neighborMu.RLock()
+	defer neighborMu.RUnlock()
+	n := len(neighbors)
+
+	if n == 0 {
+		return ""
 	}
-	return &reg
+
+	//estrae un indice casuale nell'intervallo [0, n)
+	targetIdx := rand.Intn(n)
+
+	idx := 0
+	for _, val := range neighbors {
+		if idx == targetIdx {
+			return val.APIUrl()
+		}
+		idx++
+	}
+
+	return ""
 }
 
 func GetStatusInfoFromKey(key string) *StatusInformation {
