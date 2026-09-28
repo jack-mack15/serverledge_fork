@@ -92,10 +92,11 @@ func main() {
 
 	// Workflow offloading policy
 	workflow.CreateOffloadingPolicy()
-
-	err := registration.StartMonitoring()
-	if err != nil {
-		log.Fatal(err)
+	if config.GetBool(config.MONITORING_ENABLED, true) {
+		err := registration.StartMonitoring()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	api.StartAPIServer(e)
