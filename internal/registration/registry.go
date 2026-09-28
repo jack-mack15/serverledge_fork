@@ -497,7 +497,7 @@ func GetRandomRemoteNodes(area string, maxRandom int) (map[string]NodeRegistrati
 	keys := make([]string, 0, len(anchors))
 	for k := range anchors {
 		//salto se sono io o l'ancora della mia area
-		if k == SelfRegistration.Key || area == SelfRegistration.Area {
+		if k == SelfRegistration.Key || area == anchors[k].Area {
 			continue
 		}
 		keys = append(keys, k)
@@ -1101,6 +1101,7 @@ func remoteMonitoring(vivaldiClient *vivaldi.Client) {
 	//log.Printf("Periodic remote Monitoring\n")
 	peersToUpdate := getRandomNodes(true, config.GetInt(config.MAX_VIVALDI_NEAR_NODES, 16))
 	if len(peersToUpdate) == 0 {
+		log.Println("No remote peers to contact")
 		return
 	}
 	for _, registeredNode := range peersToUpdate {

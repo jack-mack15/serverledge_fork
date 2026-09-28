@@ -67,6 +67,12 @@ func main() {
 	// Register a signal handler to clea-nup things on termination
 	registerTerminationHandler(e)
 
+	//avvio il registration per pharos
+	err = registration.StartMonitoring()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	mab.InitBanditManager()
 	lb.StartReverseProxy(e, myArea)
 }
