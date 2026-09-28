@@ -46,10 +46,16 @@ func main() {
 	}
 	config.ReadConfiguration(configFileName)
 
-	myArea := config.GetString(config.REGISTRY_AREA, "ROME")
+	myArea := config.GetString(config.REGISTRY_AREA, "ROMA")
 	node.LocalNode = node.NewRandomIdentifier(myArea)
 
 	err := registration.RegisterLoadBalancer()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	//creo l'area cloud
+	err = registration.CreateNewArea(myArea)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -58,7 +64,7 @@ func main() {
 	e.HideBanner = true
 	e.Use(middleware.Recover())
 
-	// Register a signal handler to cleanup things on termination
+	// Register a signal handler to clea-nup things on termination
 	registerTerminationHandler(e)
 
 	mab.InitBanditManager()

@@ -104,7 +104,7 @@ func JoinConsistentHashArea() error {
 		node.LocalNode = tempNode
 		//salvo la mia anchor, che sono io
 		myAnchor = tempNode.Key
-		err = createNewArea()
+		err = CreateNewArea("")
 		if err != nil {
 			return nil //TODO gestire correttamente questo errore
 		}
@@ -311,8 +311,10 @@ func registerAnchor(area string, hasToRemove bool) error {
 }
 
 // funzione che crea una nuova area
-func createNewArea() error {
-	area := "Area-" + node.LocalNode.Key
+func CreateNewArea(area string) error {
+	if area == "" {
+		area = "Area-" + node.LocalNode.Key
+	}
 
 	log.Println("New area registered: " + area)
 	node.LocalNode.Area = area
