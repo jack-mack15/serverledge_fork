@@ -754,7 +754,7 @@ func StartMonitoring() error {
 	remoteInfo = make(map[string]*StatusInformation)
 
 	defaultConfig := vivaldi.DefaultConfig()
-	defaultConfig.Dimensionality = 3
+	defaultConfig.Dimensionality = 2
 	var err error
 	LocalVivaldiClient, err = vivaldi.NewClient(defaultConfig)
 	if err != nil {
@@ -814,7 +814,7 @@ func StartMonitoring() error {
 
 // useful for test about vivaldi convergence
 func dumpCoordinates() {
-	checkTimer := time.NewTicker(time.Duration(1000) * time.Second)
+	checkTimer := time.NewTicker(time.Duration(1) * time.Second)
 	for {
 		select {
 		case <-checkTimer.C:
@@ -1015,53 +1015,49 @@ func updateRemoteOffloadingTarget() {
 			return
 		}
 		remoteArea = cloud.Area
-	}
+		remoteOffloadingTarget = *cloud
+		return
 
-	lbs, err := GetLBInArea(remoteArea)
-	if err != nil {
-		log.Println(err)
-	}
-	if err == nil && len(lbs) > 0 {
-		for _, lb := range lbs {
-			log.Printf("Using LB as offloading target: %v", lb.NodeID)
-			remoteOffloadingTarget = lb
-			return
+	} else {
+		//approccio statico
+		lbs, err := GetLBInArea(remoteArea)
+		if err != nil {
+			log.Println(err)
 		}
-	}
-
-	remoteNode, err := GetOneNodeInArea(remoteArea, false)
-	if err == nil {
-		log.Printf("Using as offloading target: %v", remoteNode.NodeID)
-		remoteOffloadingTarget = remoteNode
+		if err == nil && len(lbs) > 0 {
+			for _, lb := range lbs {
+				log.Printf("Using LB as offloading target: %v", lb.NodeID)
+				remoteOffloadingTarget = lb
+				return
+			}
+		}
 	}
 }
 
 // ritorna l'area esterna più vicina
 func getNearestCloud() *NodeRegistration {
-	nearestKey := ""
+	var nearestNode *NodeRegistration
 	minDistance := time.Duration(math.MaxInt64) //valore massimo come riferimento
 
 	for key, info := range remoteInfo {
-
+		remoteNode := GetRemotePeerFromKey(key)
+		if remoteNode == nil || !strings.HasPrefix(remoteNode.Area, "CLOUD-") {
+			continue
+		}
 		//ottengo distanza attuale
 		distance := RemoteVivaldiClient.DistanceTo(&info.Coordinates)
 
 		if distance < minDistance {
 			minDistance = distance
-			nearestKey = key
+			nearestNode = remoteNode
 		}
 	}
 
-	if nearestKey == "" {
+	if nearestNode == nil {
 		return nil
 	}
 
-	//ottengo il nodo più vicino
-	nearestNode, ok := remoteNodes[nearestKey]
-	if !ok {
-		return nil
-	}
-	return &nearestNode
+	return nearestNode
 }
 
 // computeNearestNeighbors finds servers nearby to the current one
@@ -1194,6 +1190,16 @@ func GetPeerFromKey(key string) *NodeRegistration {
 	neighborMu.RLock()
 	defer neighborMu.RUnlock()
 	reg, ok := neighbors[key]
+	if !ok {
+		return nil
+	}
+	return &reg
+}
+
+func GetRemotePeerFromKey(key string) *NodeRegistration {
+	neighborMu.RLock()
+	defer neighborMu.RUnlock()
+	reg, ok := remoteNodes[key]
 	if !ok {
 		return nil
 	}

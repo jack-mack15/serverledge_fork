@@ -47,6 +47,7 @@ func main() {
 	config.ReadConfiguration(configFileName)
 
 	myArea := config.GetString(config.REGISTRY_AREA, "ROMA")
+	myArea = "CLOUD-" + myArea
 	node.LocalNode = node.NewRandomIdentifier(myArea)
 
 	err := registration.RegisterLoadBalancer()
