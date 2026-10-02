@@ -10,13 +10,12 @@ HOSTNAME = socket.gethostname()
 CSV_FILE = f"log_{HOSTNAME}.csv"
 SERVERLEDGE_LOG_FILE = "/home/ubuntu/serverledge-tesi/serverledge.log"  # Percorso assoluto
 
-# Regex aggiornata per catturare anche il nome del nodo
+# Regex aggiornata per catturare il nome del nodo e le coordinate 2D (senza Z)
 LOG_PATTERN = re.compile(
     r"node:\s*(?P<node>[^;]+);\s*"
     r"count:(?P<count>\d+);\s*"
     r"X:\s*(?P<x>-?[\d\.]+);\s*"
     r"Y:\s*(?P<y>-?[\d\.]+);\s*"
-    r"Z:\s*(?P<z>-?[\d\.]+);\s*"
     r"Adj:\s*(?P<adj>-?[\d\.]+);\s*"
     r"Height:\s*(?P<height>-?[\d\.]+)"
 )
@@ -27,7 +26,8 @@ def main():
     if not os.path.exists(CSV_FILE):
         with open(CSV_FILE, mode="w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(["timestamp", "node_id", "name", "counter", "x", "y", "z", "adjustment", "height"])
+            # Rimossa la colonna 'z' dall'intestazione
+            writer.writerow(["timestamp", "node_id", "name", "counter", "x", "y", "adjustment", "height"])
 
     seen_entries = set()
 
@@ -52,6 +52,7 @@ def main():
 
                         with open(CSV_FILE, mode="a", newline="") as f:
                             writer = csv.writer(f)
+                            # Rimossa la scrittura del dato 'z'
                             writer.writerow([
                                 current_time,
                                 HOSTNAME,
@@ -59,7 +60,6 @@ def main():
                                 data["count"],
                                 data["x"],
                                 data["y"],
-                                data["z"],
                                 data["adj"],
                                 data["height"]
                             ])
