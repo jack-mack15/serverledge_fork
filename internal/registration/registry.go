@@ -905,7 +905,7 @@ func calculateRadius() {
 // calculateCentroid calcola il centro della zona di nodi come media aritmetica delle componenti dei nodi.
 // eseguito solo dall'anchor
 func calculateCentroid() {
-	var sumX, sumY, sumZ float64
+	var sumX, sumY float64
 	var centroid = vivaldi.Coordinate{}
 	neighborMu.RLock()
 
@@ -913,7 +913,7 @@ func calculateCentroid() {
 		temp := n.Coordinates.Vec
 		sumX += temp[0]
 		sumY += temp[1]
-		sumZ += temp[2]
+		//sumZ += temp[2]
 	}
 
 	neighborMu.RUnlock()
@@ -921,13 +921,13 @@ func calculateCentroid() {
 	//aggiungo coordinate anchor
 	sumX += LocalVivaldiClient.GetCoordinate().Vec[0]
 	sumY += LocalVivaldiClient.GetCoordinate().Vec[1]
-	sumZ += LocalVivaldiClient.GetCoordinate().Vec[2]
+	//sumZ += LocalVivaldiClient.GetCoordinate().Vec[2]
 
 	sumX /= float64(len(neighborInfo) + 1)
 	sumY /= float64(len(neighborInfo) + 1)
-	sumZ /= float64(len(neighborInfo) + 1)
+	//sumZ /= float64(len(neighborInfo) + 1)
 
-	centroid.Vec = []float64{sumX, sumY, sumZ}
+	centroid.Vec = []float64{sumX, sumY} //, sumZ}
 	centroid.Error = 0.0
 	centroid.Height = 0.0
 	centroid.Adjustment = 0.0
