@@ -37,7 +37,7 @@ func (p *EdgePolicy) OnArrival(r *scheduledRequest) {
 		}
 	}
 
-	log.Println("Dropping request")
+	log.Println("----------------------------- EDGE Dropping request")
 	dropRequest(r) // r.CanDoOffloading == true, NoSuitableNode == true && fallBackLocally == false leads here, so we drop
 	// the request in that case
 }

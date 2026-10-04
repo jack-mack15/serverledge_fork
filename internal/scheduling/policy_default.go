@@ -8,7 +8,6 @@ import (
 	"github.com/serverledge-faas/serverledge/internal/container"
 	"github.com/serverledge-faas/serverledge/internal/function"
 	"github.com/serverledge-faas/serverledge/internal/node"
-	"github.com/serverledge-faas/serverledge/internal/registration"
 )
 
 // DefaultLocalPolicy can be used on single node deployments. Directly executes the function locally, or drops the request if there aren't enough resources.
@@ -91,31 +90,34 @@ func (p *DefaultLocalPolicy) OnArrival(r *scheduledRequest) {
 		execLocally(r, containerID, warm) // decides to execute locally
 		return
 	}
-
-	if errors.Is(err, node.OutOfResourcesErr) {
-		log.Printf("No enough resources to execute %s. Available res: %s\n", r.Fun, &node.LocalResources)
-		// pass
-	} else {
-		// other error
-		dropRequest(r)
-		return
-	}
-
-	// enqueue if possible
-	/*if p.queue != nil {
-		p.queue.Lock()
-		defer p.queue.Unlock()
-		if p.queue.enqueue(r) {
-			log.Printf("[%s] Added to queue (length=%d)\n", r, p.queue.len())
+	log.Println("-------------------------------------------------Cloud DROP")
+	dropRequest(r)
+	/*
+		if errors.Is(err, node.OutOfResourcesErr) {
+			log.Printf("No enough resources to execute %s. Available res: %s\n", r.Fun, &node.LocalResources)
+			// pass
+		} else {
+			// other error
+			dropRequest(r)
 			return
 		}
-	}*/
 
-	//cerco un nodo randomico su cui fare offloading
-	target := registration.GetRandomNodeUrl()
-	if target != "" {
-		handleOffload(r, target)
-		return
-	}
-	dropRequest(r)
+		// enqueue if possible
+		/*if p.queue != nil {
+			p.queue.Lock()
+			defer p.queue.Unlock()
+			if p.queue.enqueue(r) {
+				log.Printf("[%s] Added to queue (length=%d)\n", r, p.queue.len())
+				return
+			}
+		}*/
+	/*
+		//cerco un nodo randomico su cui fare offloading
+		target := registration.GetRandomNodeUrl()
+		if target != "" {
+			handleOffload(r, target)
+			return
+		}
+		dropRequest(r)
+	*/
 }
