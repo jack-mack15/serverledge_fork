@@ -32,6 +32,7 @@ func (p *CloudEdgePolicy) OnArrival(r *scheduledRequest) {
 
 	if r.CanDoOffloading {
 		handleCloudOffload(r)
+		handleToCloud(r)
 	} else {
 		log.Printf("Dropping request because cannot exec locally (architecutre is supported: %t) and cannot offload", canRunLocally)
 		dropRequest(r)

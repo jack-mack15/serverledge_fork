@@ -168,6 +168,15 @@ func handleOffload(r *scheduledRequest, serverHost string) {
 	}
 }
 
+func handleOffloadMio(r *scheduledRequest, serverHost string) {
+	r.CanDoOffloading = true // the next server can't offload this request
+	r.decisionChannel <- schedDecision{
+		action:     EXEC_REMOTE,
+		cont:       nil,
+		remoteHost: serverHost,
+	}
+}
+
 func consistentHashOffload(r *scheduledRequest, serverHost string) {
 	r.CanDoOffloading = true // the next server is the last one to offload if necessary
 	r.decisionChannel <- schedDecision{
@@ -186,6 +195,20 @@ func handleCloudOffload(r *scheduledRequest) {
 	} else if offloadingTarget.IsLoadBalancer || r.Fun.SupportsArch(node.LocalNode.Arch) {
 		handleOffload(r, offloadingTarget.APIUrl())
 	} else {
+		dropRequest(r)
+	}
+}
+
+func handleToCloud(r *scheduledRequest) {
+	offloadingTarget := registration.GetRemoteOffloadingTarget()
+	if offloadingTarget == nil {
+		log.Printf("No remote offloading target available; dropping request")
+		r.decisionChannel <- schedDecision{action: DROP}
+		// TODO check if this is a correct assumption to make
+	} else if offloadingTarget.IsLoadBalancer || r.Fun.SupportsArch(node.LocalNode.Arch) {
+		handleOffloadMio(r, offloadingTarget.APIUrl())
+	} else {
+		log.Println("--------------------------no")
 		dropRequest(r)
 	}
 }
